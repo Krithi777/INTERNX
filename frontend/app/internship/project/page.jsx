@@ -63,6 +63,8 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true)
   const [vsCodeConnecting, setVsCodeConnecting] = useState(false)
   const [vsCodeConnected, setVsCodeConnected] = useState(false)
+  const [vsCodeError, setVsCodeError] = useState(null)
+  const [showOpenPrompt, setShowOpenPrompt] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
@@ -75,7 +77,6 @@ export default function ProjectPage() {
 
   const loadProject = async () => {
     try {
-      // Check if user already has a project assigned
       const profileRes = await api.get('/api/auth/me')
       const profile = profileRes.data
 
@@ -83,7 +84,6 @@ export default function ProjectPage() {
         const projectRes = await api.get(`/api/projects/${profile.project_id}`)
         setProject(projectRes.data)
       } else {
-        // Assign a random project for their role
         const assignRes = await api.post('/api/projects/assign')
         setProject(assignRes.data)
       }
@@ -96,24 +96,34 @@ export default function ProjectPage() {
 
   const handleVsCodeConnect = async () => {
     setVsCodeConnecting(true)
-    // Open VS Code with the InternX extension deep link
-    // The extension reads this token to authenticate
+    setVsCodeError(null)
+    setShowOpenPrompt(false)
+
     try {
-      window.open(`vscode://internx.internx-vscode/connect?token=${token}&project=${project?.id}`, '_blank')
+      const res = await api.post(`/api/projects/${project?.id}/setup-token`)
+      const { setup_url } = res.data
+
+      // Use a hidden <a> click — more reliable than window.location.href for custom protocols
+      const a = document.createElement('a')
+      a.href = setup_url
+      a.click()
+
+      // After 2.5s show "did it open?" prompt instead of blindly marking connected
       setTimeout(() => {
-        setVsCodeConnected(true)
         setVsCodeConnecting(false)
-      }, 2000)
-    } catch {
+        setShowOpenPrompt(true)
+      }, 2500)
+
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Failed to connect. Make sure internx-cli is installed.'
+      setVsCodeError(msg)
       setVsCodeConnecting(false)
     }
   }
 
   const handleStartSprint = () => {
-  // Mark project as seen so dashboard doesn't redirect back
-  localStorage.setItem('internx-project-seen', 'true')
-  router.push('/dashboard')
-}
+    router.push('/dashboard')
+  }
 
   if (loading) {
     return (
@@ -229,6 +239,50 @@ export default function ProjectPage() {
               )}
             </div>
           </div>
+
+          {/* Windows open prompt — shown after deep link fires */}
+          {showOpenPrompt && !vsCodeConnected && (
+            <div className="mt-4 p-4 rounded-2xl animate-fade-up"
+              style={{ background: '#fef9c3', border: '1px solid #fde68a' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#92400e' }}>
+                👀 Did VS Code open?
+              </p>
+              <p className="text-xs mb-3" style={{ color: '#a16207' }}>
+                Windows shows an <strong>"Allow this site to open InternX?"</strong> popup — click <strong>Open</strong> when it appears.
+                If you missed it, click the browser address bar area or try again.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setVsCodeConnected(true); setShowOpenPrompt(false) }}
+                  className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105"
+                  style={{ background: '#dcfce7', color: '#16a34a' }}>
+                  ✓ Yes, it opened
+                </button>
+                <button
+                  onClick={() => { setShowOpenPrompt(false); handleVsCodeConnect() }}
+                  className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-105"
+                  style={{ background: '#fee2e2', color: '#dc2626' }}>
+                  ✗ No — try again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Error state */}
+          {vsCodeError && (
+            <div className="mt-4 p-4 rounded-2xl animate-fade-up"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#dc2626' }}>⚠️ Connection failed</p>
+              <p className="text-xs mb-3" style={{ color: '#b91c1c' }}>{vsCodeError}</p>
+              <p className="text-xs" style={{ color: '#6b7280' }}>
+                Make sure you've installed the CLI:{' '}
+                <code className="px-1.5 py-0.5 rounded" style={{ background: '#0d1117', color: '#58a6ff' }}>
+                  npm install -g .
+                </code>{' '}
+                (run from the internx-cli folder)
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -421,6 +475,7 @@ export default function ProjectPage() {
                       </div>
                     ))}
                   </div>
+
                   <button onClick={handleVsCodeConnect} disabled={vsCodeConnected || vsCodeConnecting}
                     className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
                     style={{
@@ -429,6 +484,15 @@ export default function ProjectPage() {
                     }}>
                     {vsCodeConnected ? '✓ Connected' : vsCodeConnecting ? 'Connecting...' : '→ Connect VS Code'}
                   </button>
+
+                  {/* Windows warning shown while connecting */}
+                  {vsCodeConnecting && (
+                    <div className="mt-3 p-3 rounded-xl text-xs animate-fade-up"
+                      style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde68a' }}>
+                      <p className="font-semibold mb-0.5">👀 Watch for a browser popup!</p>
+                      <p>Click <strong>"Open"</strong> when Windows asks to allow InternX.</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="card p-5">
