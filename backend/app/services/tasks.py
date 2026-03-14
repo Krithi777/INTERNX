@@ -1,99 +1,84 @@
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.core.auth import get_current_user
 from app.core.database import db
 
-# ── STATE MACHINE ────────────────────────────────────────────────────────────
-# Defines which status transitions are allowed.
-# Key = current status, Value = list of statuses it can move to.
-# This prevents an intern from skipping "review" and going straight to "done".
-
-ALLOWED_TRANSITIONS = {
-    "todo":        ["in_progress"],
-    "in_progress": ["todo", "review"],
-    "review":      ["in_progress", "done"],
-    "done":        [],   # terminal state — nothing can come after done
-}
+router = APIRouter(prefix="/api/tasks", tags=["Tasks"])
 
 
-def validate_transition(current: str, new: str) -> None:
-    """
-    Called before every status update.
-    Raises 400 Bad Request if the transition is not allowed.
-    """
-    allowed = ALLOWED_TRANSITIONS.get(current, [])
-    if new not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot move task from '{current}' to '{new}'. "
-                   f"Allowed transitions: {allowed}"
-        )
+@router.get("/my-tasks")
+async def get_my_tasks(current_user: dict = Depends(get_current_user)):
+    """Get tasks for the current intern filtered by their assigned project."""
+    user_id = current_user["id"]
+
+    profile = db.table("profiles").select("project_id").eq("id", user_id).execute()
+    project_id = profile.data[0].get("project_id") if profile.data else None
+
+    if project_id:
+        result = db.table("tasks").select("*").eq("assigned_to", user_id).eq("project_id", project_id).execute()
+    else:
+        result = db.table("tasks").select("*").eq("assigned_to", user_id).execute()
+
+    return result.data or []
 
 
-def get_task_or_404(task_id: str) -> dict:
-    """Fetch a task by ID or raise 404 if not found."""
-    result = db.table("tasks").select("*").eq("id", task_id).single().execute()
+@router.get("/sprints/active")
+async def get_active_sprint(current_user: dict = Depends(get_current_user)):
+    """Get the active sprint for the intern's assigned project."""
+    user_id = current_user["id"]
+
+    profile = db.table("profiles").select("project_id").eq("id", user_id).execute()
+    project_id = profile.data[0].get("project_id") if profile.data else None
+
+    if project_id:
+        # Find sprint linked to this project's tasks
+        tasks = db.table("tasks").select("sprint_id").eq("project_id", project_id).not_.is_("sprint_id", "null").limit(1).execute()
+        if tasks.data and tasks.data[0].get("sprint_id"):
+            sprint_id = tasks.data[0]["sprint_id"]
+            sprint = db.table("sprints").select("*").eq("id", sprint_id).execute()
+            return sprint.data or []
+
+    # Fallback: any active sprint
+    result = db.table("sprints").select("*").eq("is_active", True).limit(1).execute()
+    return result.data or []
+
+
+@router.get("/{task_id}")
+async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a single task by ID."""
+    result = db.table("tasks").select("*").eq("id", task_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
-    return result.data
+    return result.data[0]
 
 
-def get_sprint_or_404(sprint_id: str) -> dict:
-    """Fetch a sprint by ID or raise 404 if not found."""
-    result = db.table("sprints").select("*").eq("id", sprint_id).single().execute()
+@router.patch("/{task_id}/status")
+async def update_task_status(task_id: str, body: dict, current_user: dict = Depends(get_current_user)):
+    """Update task status."""
+    valid_statuses = ["todo", "in_progress", "review", "done"]
+    status = body.get("status")
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    result = db.table("tasks").update({"status": status, "updated_at": "now()"}).eq("id", task_id).execute()
     if not result.data:
-        raise HTTPException(status_code=404, detail="Sprint not found")
-    return result.data
+        raise HTTPException(status_code=404, detail="Task not found")
+    return result.data[0]
 
 
-def assert_task_owner(task: dict, user_id: str) -> None:
-    """
-    Ensures an intern can only update their OWN tasks.
-    Raises 403 Forbidden if they try to modify someone else's task.
-    """
-    if task["assigned_to"] != user_id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only modify tasks assigned to you"
-        )
+@router.patch("/{task_id}")
+async def update_task(task_id: str, body: dict, current_user: dict = Depends(get_current_user)):
+    """Update task fields. Setting github_pr_url automatically moves status to review."""
+    allowed = {"title", "description", "status", "priority", "due_date", "resources", "github_pr_url"}
+    update_data = {k: v for k, v in body.items() if k in allowed}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
 
+    # Auto-move to review when PR is submitted
+    if "github_pr_url" in update_data and update_data["github_pr_url"]:
+        update_data["status"] = "review"
 
-def calculate_sprint_progress(sprint_id: str) -> dict:
-    """
-    Calculates completion stats for a sprint.
-    Returns counts per status + completion percentage + average score.
-    """
-    result = db.table("tasks").select("status, score").eq("sprint_id", sprint_id).execute()
-    tasks  = result.data or []
-
-    if not tasks:
-        return {
-            "sprint_id":       sprint_id,
-            "total_tasks":     0,
-            "todo":            0,
-            "in_progress":     0,
-            "review":          0,
-            "done":            0,
-            "completion_rate": 0.0,
-            "average_score":   None,
-        }
-
-    counts = {"todo": 0, "in_progress": 0, "review": 0, "done": 0}
-    scores = []
-
-    for task in tasks:
-        status = task.get("status", "todo")
-        if status in counts:
-            counts[status] += 1
-        if task.get("score") is not None:
-            scores.append(task["score"])
-
-    total           = len(tasks)
-    completion_rate = round((counts["done"] / total) * 100, 1) if total > 0 else 0.0
-    average_score   = round(sum(scores) / len(scores), 1) if scores else None
-
-    return {
-        "sprint_id":       sprint_id,
-        "total_tasks":     total,
-        "completion_rate": completion_rate,
-        "average_score":   average_score,
-        **counts,
-    }
+    update_data["updated_at"] = "now()"
+    result = db.table("tasks").update(update_data).eq("id", task_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return result.data[0]

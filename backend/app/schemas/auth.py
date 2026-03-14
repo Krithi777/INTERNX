@@ -49,6 +49,7 @@ class UserResponse(BaseModel):
     role:             Role
     intern_role:      Optional[InternRole] = None
     bio:              Optional[str]        = None
+    project_id:      Optional[str] = None  
     created_at:       str
 
 

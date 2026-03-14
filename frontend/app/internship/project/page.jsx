@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import api from '@/lib/api'
@@ -56,6 +57,194 @@ function FolderTree({ name, node, depth = 0 }) {
   )
 }
 
+
+// ─── Setup Guide Modal ────────────────────────────────────────
+function SetupGuideModal({ onClose }) {
+  const steps = [
+    {
+      number: '01',
+      title: 'Add GitHub Repo URL',
+      description: 'Go to the Overview tab on your project page. Find the "GitHub Repository" card and paste your GitHub repo URL — e.g. https://github.com/your-org/your-repo. Click Save.',
+      code: null,
+      tip: 'This only needs to be done once per project. Once saved, the Connect VS Code button will work for all interns.',
+    },
+    {
+      number: '02',
+      title: 'Create a GitHub Token',
+      description: 'Go to github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. Select the "repo" scope and generate it. Copy the token — you will need it in the next step.',
+      code: null,
+      tip: 'The token starts with ghp_. Save it somewhere safe — GitHub only shows it once.',
+    },
+    {
+      number: '03',
+      title: 'Install Node.js',
+      description: "Download and install Node.js from nodejs.org if you haven't already. This is required to run the InternX CLI.",
+      code: null,
+      tip: 'Check if already installed: open a terminal and type node --version',
+    },
+    {
+      number: '04',
+      title: 'Install InternX CLI',
+      description: 'Open your terminal (Command Prompt or PowerShell on Windows, Terminal on Mac) and run:',
+      code: 'npm install -g internx-cli',
+      tip: 'This installs the CLI globally and registers the internx:// protocol on your OS. Only needed once.',
+    },
+    {
+      number: '05',
+      title: 'Save your GitHub Token',
+      description: 'Paste the token you created in step 02 into this command and run it in your terminal:',
+      code: 'internx login --token ghp_your_token_here',
+      tip: 'Your token is saved locally on your machine. InternX uses it to clone repos on your behalf.',
+    },
+    {
+      number: '06',
+      title: 'Click "Connect VS Code"',
+      description: 'Come back here and click the Connect VS Code button. Your browser will ask permission to open InternX — click Open or Allow.',
+      code: null,
+      tip: 'Watch for a small browser popup near the address bar. It may appear briefly.',
+    },
+    {
+      number: '07',
+      title: 'VS Code opens automatically',
+      description: 'InternX will clone the repo, create your personal branch, scaffold the folder structure, and open VS Code — all automatically.',
+      code: null,
+      tip: 'This may take 10–20 seconds the first time while the repo clones.',
+    },
+    {
+      number: '08',
+      title: 'Submit work for AI review',
+      description: "When you're done coding, open the VS Code terminal and run this single command to commit, push, and create a PR:",
+      code: 'internx pr --message "What I built"',
+      tip: 'No git add or git commit needed — internx pr handles everything.',
+    },
+  ]
+
+  const [activeStep, setActiveStep] = useState(0)
+  const step = steps[activeStep]
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    if (step.code) {
+      navigator.clipboard.writeText(step.code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-2xl animate-fade-up"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', maxHeight: '90vh', overflowY: 'auto' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div>
+            <h2 className="font-display font-bold text-base" style={{ color: 'var(--ink)' }}>VS Code Setup Guide</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>One-time setup · ~5 minutes</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center hover:opacity-70 transition-opacity"
+            style={{ background: 'var(--surface-2)', color: 'var(--ink-muted)' }}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Step pills */}
+        <div className="flex gap-1.5 px-6 py-3 overflow-x-auto" style={{ borderBottom: '1px solid var(--border)' }}>
+          {steps.map((s, i) => (
+            <button key={i} onClick={() => setActiveStep(i)}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{
+                background: activeStep === i ? '#24292e' : 'var(--surface-2)',
+                color: activeStep === i ? 'white' : 'var(--ink-muted)',
+              }}>
+              {s.number}
+            </button>
+          ))}
+        </div>
+
+        {/* Step content */}
+        <div className="px-6 py-5">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-display font-black text-xs text-white"
+              style={{ background: '#24292e' }}>
+              {step.number}
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-sm mb-1" style={{ color: 'var(--ink)' }}>{step.title}</h3>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-soft)' }}>{step.description}</p>
+            </div>
+          </div>
+
+          {/* Code block */}
+          {step.code && (
+            <div className="flex items-center gap-3 rounded-xl px-4 py-3 mb-4 font-mono text-xs"
+              style={{ background: '#0d1117', border: '1px solid #30363d' }}>
+              <span style={{ color: '#8b949e' }}>$</span>
+              <span style={{ color: '#58a6ff', flex: 1 }}>{step.code}</span>
+              <button onClick={handleCopy} className="flex-shrink-0 transition-opacity hover:opacity-100 opacity-60" title="Copy">
+                {copied
+                  ? <svg className="w-4 h-4" style={{ color: '#3fb950' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                  : <svg className="w-4 h-4" style={{ color: '#8b949e' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+                }
+              </button>
+            </div>
+          )}
+
+          {/* Screenshot placeholder — replace src with real screenshots */}
+          <img
+            src={`/guide/step-${step.number}.png`}
+            alt={step.title}
+            className="w-full rounded-xl mb-4 object-cover"
+            style={{ border: '1px solid #30363d' }}
+          />
+
+          {/* Tip */}
+          <div className="flex items-start gap-2.5 rounded-xl px-4 py-3"
+            style={{ background: 'var(--accent-soft)' }}>
+            <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
+            </svg>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--accent)' }}>{step.tip}</p>
+          </div>
+        </div>
+
+        {/* Footer nav */}
+        <div className="flex items-center justify-between px-6 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button onClick={() => setActiveStep(i => Math.max(0, i - 1))}
+            disabled={activeStep === 0}
+            className="px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-30"
+            style={{ background: 'var(--surface-2)', color: 'var(--ink)' }}>
+            ← Back
+          </button>
+          <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+            Step {activeStep + 1} of {steps.length}
+          </span>
+          {activeStep < steps.length - 1 ? (
+            <button onClick={() => setActiveStep(i => i + 1)}
+              className="px-4 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              style={{ background: '#24292e', color: 'white' }}>
+              Next →
+            </button>
+          ) : (
+            <button onClick={onClose}
+              className="px-4 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-80"
+              style={{ background: '#16a34a', color: 'white' }}>
+              ✓ Got it!
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  , document.body)
+}
+
 export default function ProjectPage() {
   const router = useRouter()
   const { user, token } = useAuthStore()
@@ -65,7 +254,12 @@ export default function ProjectPage() {
   const [vsCodeConnected, setVsCodeConnected] = useState(false)
   const [vsCodeError, setVsCodeError] = useState(null)
   const [showOpenPrompt, setShowOpenPrompt] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const [repoUrl, setRepoUrl] = useState('')
+  const [repoSaving, setRepoSaving] = useState(false)
+  const [repoSaved, setRepoSaved] = useState(false)
+  const [repoError, setRepoError] = useState(null)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,9 +277,11 @@ export default function ProjectPage() {
       if (profile.project_id) {
         const projectRes = await api.get(`/api/projects/${profile.project_id}`)
         setProject(projectRes.data)
+        setRepoUrl(projectRes.data.repo_url || '')
       } else {
         const assignRes = await api.post('/api/projects/assign')
         setProject(assignRes.data)
+        setRepoUrl(assignRes.data.repo_url || '')
       }
     } catch (err) {
       console.error('Failed to load project', err)
@@ -118,6 +314,22 @@ export default function ProjectPage() {
       const msg = err?.response?.data?.detail || 'Failed to connect. Make sure internx-cli is installed.'
       setVsCodeError(msg)
       setVsCodeConnecting(false)
+    }
+  }
+
+  const handleSaveRepo = async () => {
+    if (!repoUrl.trim()) return
+    setRepoSaving(true)
+    setRepoError(null)
+    try {
+      await api.patch(`/api/projects/${project?.id}/repo`, { repo_url: repoUrl.trim() })
+      setProject(p => ({ ...p, repo_url: repoUrl.trim() }))
+      setRepoSaved(true)
+      setTimeout(() => setRepoSaved(false), 3000)
+    } catch (err) {
+      setRepoError(err?.response?.data?.detail || 'Failed to save repo URL')
+    } finally {
+      setRepoSaving(false)
     }
   }
 
@@ -206,7 +418,16 @@ export default function ProjectPage() {
             </div>
 
             {/* VS Code Connect Button */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <button
+                onClick={() => setShowGuide(true)}
+                title="Setup guide"
+                className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-muted)' }}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                </svg>
+              </button>
               {vsCodeConnected ? (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
                   style={{ background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0' }}>
@@ -239,6 +460,9 @@ export default function ProjectPage() {
               )}
             </div>
           </div>
+
+          {/* Setup Guide Modal */}
+          {showGuide && <SetupGuideModal onClose={() => setShowGuide(false)} />}
 
           {/* Windows open prompt — shown after deep link fires */}
           {showOpenPrompt && !vsCodeConnected && (
@@ -353,6 +577,63 @@ export default function ProjectPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Repo URL card */}
+                <div className="card p-5">
+                  <h3 className="font-display font-bold text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                    GitHub Repository
+                  </h3>
+                  <p className="text-xs mb-3" style={{ color: 'var(--ink-muted)' }}>
+                    {project.repo_url ? 'Repo linked — VS Code automation ready' : 'Add the GitHub repo URL to enable VS Code automation'}
+                  </p>
+
+                  {project.repo_url ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0 px-3 py-2 rounded-lg text-xs font-mono truncate"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-soft)' }}>
+                        <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--ink-muted)' }} fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                        <span className="truncate">{project.repo_url.replace('https://github.com/', '')}</span>
+                      </div>
+                      <button
+                        onClick={() => { setRepoUrl(project.repo_url); setProject(p => ({ ...p, repo_url: null })) }}
+                        className="flex-shrink-0 p-2 rounded-lg transition-opacity hover:opacity-70"
+                        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-muted)' }}
+                        title="Edit">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="url"
+                        value={repoUrl}
+                        onChange={e => setRepoUrl(e.target.value)}
+                        placeholder="https://github.com/org/repo"
+                        className="w-full px-3 py-2 rounded-lg text-xs font-mono outline-none transition-all"
+                        style={{
+                          background: 'var(--surface-2)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--ink)',
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveRepo()}
+                      />
+                      {repoError && (
+                        <p className="text-xs" style={{ color: '#dc2626' }}>{repoError}</p>
+                      )}
+                      <button
+                        onClick={handleSaveRepo}
+                        disabled={repoSaving || !repoUrl.trim()}
+                        className="w-full py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
+                        style={{ background: '#24292e', color: 'white' }}>
+                        {repoSaving ? 'Saving...' : repoSaved ? '✓ Saved!' : 'Save Repo URL'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Company info */}

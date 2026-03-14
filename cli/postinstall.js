@@ -54,8 +54,11 @@ function registerWindows(binPath) {
 
   if (!fs.existsSync(batDir)) fs.mkdirSync(batDir, { recursive: true });
 
+  // "%~1" — quotes the arg and strips any extra quotes Windows adds.
+  // Without quotes, & in the URL is treated as a CMD command separator
+  // and everything after the first & (branch, token, folderStructure) is lost.
   const bat = '@echo off\r\n'
-    + `"${nodePath}" "${jsBin}" url %1\r\n`;
+    + `"${nodePath}" "${jsBin}" url "%~1"\r\n`;
 
   fs.writeFileSync(batPath, bat, 'utf8');
   console.log(`   Launcher written : ${batPath}`);

@@ -98,7 +98,12 @@ async def github_callback(body: GitHubCallbackRequest):
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return UserResponse(**current_user)
+    # Always fetch fresh from DB — JWT does not include project_id or other
+    # fields that change after login (intern_role, project assignment, etc.)
+    result = db.table("profiles").select("*").eq("id", current_user["id"]).single().execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return UserResponse(**result.data)
 
 
 @router.put("/me", response_model=UserResponse)

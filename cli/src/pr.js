@@ -109,6 +109,22 @@ async function run({ message, base }) {
     prSpinner.fail(chalk.red('Failed to create PR'));
 
     if (err.response?.status === 422) {
+      // PR already exists — fetch and show the existing one
+      try {
+        const existing = await axios.get(
+          `https://api.github.com/repos/${owner}/${repo}/pulls?head=${owner}:${branch}&state=open`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (existing.data?.length > 0) {
+          prSpinner.succeed(chalk.green('PR already exists!'));
+          console.log(chalk.bold('\n🎉 Done!\n'));
+          console.log(chalk.gray('   PR Title  : ') + chalk.white(existing.data[0].title));
+          console.log(chalk.gray('   Branch    : ') + chalk.white(`${branch} → ${base}`));
+          console.log(chalk.gray('   PR Link   : ') + chalk.cyan.underline(existing.data[0].html_url));
+          console.log(chalk.bold.gray('\n   AI review will begin shortly and post comments on your PR.\n'));
+          return;
+        }
+      } catch { /* fall through to generic message */ }
       console.log(chalk.yellow('\n⚠️  A PR from this branch already exists.'));
       console.log(chalk.gray(`   Check: https://github.com/${owner}/${repo}/pulls\n`));
     } else if (err.response?.status === 401) {
