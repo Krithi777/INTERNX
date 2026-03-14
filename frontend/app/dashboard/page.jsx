@@ -119,14 +119,31 @@ export default function DashboardPage() {
       try {
         const api = (await import('@/lib/api')).default
         const res = await api.get('/api/auth/me')
-        // If user has no project yet, send them to project page first
-        if (!res.data.project_id) {
-          router.push('/internship/project')
-          return
+
+        let projectId = res.data.project_id
+
+        // If user has no project yet, auto-assign one instead of redirecting away
+        if (!projectId) {
+          if (!res.data.intern_role) {
+            // Onboarding not complete — project page will handle it
+            router.push('/internship/project')
+            return
+          }
+          try {
+            const assignRes = await api.post('/api/projects/assign')
+            projectId = assignRes.data?.id
+          } catch (err) {
+            console.error('Failed to auto-assign project', err)
+            router.push('/internship/project')
+            return
+          }
         }
+
         // Load project info for the banner
-        const projectRes = await api.get(`/api/projects/${res.data.project_id}`)
-        setProject(projectRes.data)
+        if (projectId) {
+          const projectRes = await api.get(`/api/projects/${projectId}`)
+          setProject(projectRes.data)
+        }
       } catch (err) {
         console.error('Failed to load profile', err)
       }

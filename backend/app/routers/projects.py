@@ -3,14 +3,75 @@ from pydantic import BaseModel
 from app.core.auth import get_current_user
 from app.core.database import db
 from app.core.config import settings
-import random, re, time, jwt, json
+import random, re, time, jwt, json, uuid
 from urllib.parse import quote
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 class RepoUrlBody(BaseModel):
     repo_url: str
+
+
+def assign_tasks_to_user(project_id: str, user_id: str):
+    """
+    Copy template tasks for this project to the new intern.
+
+    Template tasks are rows in the tasks table where assigned_to IS NULL
+    (or assigned_to = the original seeded intern ID). We clone them with
+    the new user's ID so every intern gets their own copy of the task list.
+    """
+    # Fetch all tasks for this project
+    all_tasks = db.table("tasks").select("*").eq("project_id", project_id).execute()
+    if not all_tasks.data:
+        return
+
+    # Check if user already has tasks for this project
+    existing = db.table("tasks").select("id") \
+        .eq("project_id", project_id) \
+        .eq("assigned_to", user_id) \
+        .execute()
+    if existing.data:
+        return  # Already has tasks — don't duplicate
+
+    # Find template tasks: assigned_to is null OR they belong to someone else
+    # (i.e. the original seeded intern). We use the first group of tasks found.
+    # De-duplicate by title so we only copy each task once.
+    seen_titles = set()
+    tasks_to_copy = []
+    for task in all_tasks.data:
+        if task["title"] not in seen_titles:
+            seen_titles.add(task["title"])
+            tasks_to_copy.append(task)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    new_tasks = []
+    for task in tasks_to_copy:
+        new_task = {
+            "id":          str(uuid.uuid4()),
+            "project_id":  project_id,
+            "assigned_to": user_id,
+            "title":       task["title"],
+            "description": task.get("description"),
+            "priority":    task.get("priority", "medium"),
+            "status":      "todo",
+            "due_date":    task.get("due_date"),
+            "sprint_id":   task.get("sprint_id"),
+            "resources":   task.get("resources"),
+            "intern_role": task.get("intern_role"),
+            "created_at":  now,
+            "updated_at":  now,
+        }
+        # Copy any other non-null fields from the template task
+        for key, val in task.items():
+            if key not in new_task and val is not None:
+                new_task[key] = val
+        new_tasks.append(new_task)
+
+    if new_tasks:
+        db.table("tasks").insert(new_tasks).execute()
 
 
 @router.get("/")
@@ -21,24 +82,36 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
 
 @router.post("/assign")
 async def assign_project(current_user: dict = Depends(get_current_user)):
+    """Randomly assign a project to the intern and copy template tasks to them."""
     user_id = current_user["id"]
     intern_role = current_user.get("intern_role")
 
     if not intern_role:
         raise HTTPException(status_code=400, detail="Complete onboarding first")
 
+    # Check if already assigned
     profile = db.table("profiles").select("project_id").eq("id", user_id).execute()
     if profile.data and profile.data[0].get("project_id"):
         existing = db.table("projects").select("*").eq("id", profile.data[0]["project_id"]).execute()
         if existing.data:
+            # Make sure they have tasks even if this is a re-visit
+            assign_tasks_to_user(existing.data[0]["id"], user_id)
             return existing.data[0]
 
+    # Fetch all projects for this role
     projects = db.table("projects").select("*").eq("intern_role", intern_role).execute()
     if not projects.data:
         raise HTTPException(status_code=404, detail=f"No projects found for role: {intern_role}")
 
+    # Pick a random one
     project = random.choice(projects.data)
+
+    # Save to profile
     db.table("profiles").update({"project_id": project["id"]}).eq("id", user_id).execute()
+
+    # Copy template tasks to this intern
+    assign_tasks_to_user(project["id"], user_id)
+
     return project
 
 
