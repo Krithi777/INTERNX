@@ -15,19 +15,7 @@ class RepoUrlBody(BaseModel):
 
 
 def assign_tasks_to_user(project_id: str, user_id: str):
-    """
-    Copy template tasks for this project to the new intern.
-
-    Template tasks are rows in the tasks table where assigned_to IS NULL
-    (or assigned_to = the original seeded intern ID). We clone them with
-    the new user's ID so every intern gets their own copy of the task list.
-    """
-    # Fetch all tasks for this project
-    all_tasks = db.table("tasks").select("*").eq("project_id", project_id).execute()
-    if not all_tasks.data:
-        return
-
-    # Check if user already has tasks for this project
+    # Check if user already has tasks
     existing = db.table("tasks").select("id") \
         .eq("project_id", project_id) \
         .eq("assigned_to", user_id) \
@@ -35,20 +23,18 @@ def assign_tasks_to_user(project_id: str, user_id: str):
     if existing.data:
         return  # Already has tasks — don't duplicate
 
-    # Find template tasks: assigned_to is null OR they belong to someone else
-    # (i.e. the original seeded intern). We use the first group of tasks found.
-    # De-duplicate by title so we only copy each task once.
-    seen_titles = set()
-    tasks_to_copy = []
-    for task in all_tasks.data:
-        if task["title"] not in seen_titles:
-            seen_titles.add(task["title"])
-            tasks_to_copy.append(task)
+    # ✅ Only fetch TEMPLATE tasks (assigned_to is null)
+    all_tasks = db.table("tasks").select("*") \
+        .eq("project_id", project_id) \
+        .is_("assigned_to", "null") \
+        .execute()
+
+    if not all_tasks.data:
+        return
 
     now = datetime.now(timezone.utc).isoformat()
-
     new_tasks = []
-    for task in tasks_to_copy:
+    for task in all_tasks.data:
         new_task = {
             "id":          str(uuid.uuid4()),
             "project_id":  project_id,
@@ -64,10 +50,6 @@ def assign_tasks_to_user(project_id: str, user_id: str):
             "created_at":  now,
             "updated_at":  now,
         }
-        # Copy any other non-null fields from the template task
-        for key, val in task.items():
-            if key not in new_task and val is not None:
-                new_task[key] = val
         new_tasks.append(new_task)
 
     if new_tasks:
