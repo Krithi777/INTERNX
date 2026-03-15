@@ -236,7 +236,17 @@ export default function TaskDetailPage() {
           {/* Actions */}
           <div className="card p-6">
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--ink-muted)' }}>Actions</h3>
-
+            {/* Ask AI Mentor — always visible */}
+<Link href={`/mentor?task_id=${task.id}`}
+  className="w-full flex items-center justify-center gap-2 py-3 mb-3"
+  style={{
+    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    borderRadius: 12, textDecoration: 'none', color: 'white',
+    fontWeight: 600, fontSize: 14,
+    boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+  }}>
+  🤖 Ask AI Mentor
+</Link>
             {task.status === 'todo' && (
               <button onClick={() => handleStatusChange('in_progress')} disabled={actionLoading}
                 className="btn-primary w-full justify-center py-3.5">
