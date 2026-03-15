@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 10080
 
     # Gemini AI
-    gemini_api_key: str
+    # Gemini AI
+    gemini_api_key: str = ""
+    # Groq AI
+    groq_api_key: str = ""
 
     # GitHub
     github_client_id: str

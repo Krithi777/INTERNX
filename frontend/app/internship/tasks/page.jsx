@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/authStore'
 import { taskApi } from '@/lib/taskApi'
@@ -27,21 +27,27 @@ export default function TasksListPage() {
   const [loading, setLoading] = useState(true)
   const [filter,  setFilter]  = useState('all')
 
-  useEffect(() => {
-    if (!user) { router.push('/auth/login'); return }
-    loadTasks()
-  }, [user])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async (signal) => {
     try {
       const res = await taskApi.getMyTasks()
+      if (signal?.aborted) return
       setTasks(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
+      if (err?.name === 'AbortError') return
       console.error('Failed to load tasks', err)
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!user) { router.push('/auth/login'); return }
+
+    const controller = new AbortController()
+    loadTasks(controller.signal)
+
+    return () => controller.abort()
+  }, [user, loadTasks])
 
   const filtered = filter === 'all' ? tasks : tasks.filter(t => t.status === filter)
 
@@ -82,11 +88,11 @@ export default function TasksListPage() {
         <div className="flex gap-1 mb-6 p-1 rounded-xl w-fit"
           style={{ background: 'var(--surface-2)' }}>
           {[
-            { key: 'all',        label: `All (${counts.all})`         },
-            { key: 'todo',       label: `To Do (${counts.todo})`      },
-            { key: 'in_progress',label: `In Progress (${counts.in_progress})` },
-            { key: 'review',     label: `Review (${counts.review})`   },
-            { key: 'done',       label: `Done (${counts.done})`       },
+            { key: 'all',        label: `All (${counts.all})`                     },
+            { key: 'todo',       label: `To Do (${counts.todo})`                  },
+            { key: 'in_progress',label: `In Progress (${counts.in_progress})`     },
+            { key: 'review',     label: `Review (${counts.review})`               },
+            { key: 'done',       label: `Done (${counts.done})`                   },
           ].map(tab => (
             <button key={tab.key} onClick={() => setFilter(tab.key)}
               className="px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200"
@@ -112,7 +118,7 @@ export default function TasksListPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {filtered.map(task => {
-              const status   = STATUS_CONFIG[task.status]   || STATUS_CONFIG.todo
+              const status   = STATUS_CONFIG[task.status]     || STATUS_CONFIG.todo
               const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium
               const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done'
               const dueDate = task.due_date

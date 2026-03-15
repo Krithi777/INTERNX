@@ -16,13 +16,16 @@ export default function CallbackPage() {
     const error = params.get('error')
 
     if (error) { router.replace(`/auth/login?error=${error}`); return }
-    if (!code || called.current) return
+    if (!code) return
+    if (called.current) return
     called.current = true
 
     const exchange = async () => {
       try {
         const { data } = await api.post('/api/auth/github/callback', { code })
         setAuth(data.user, data.access_token)
+        localStorage.setItem("user_id", data.user.id)
+        localStorage.setItem("internx_token", data.access_token)
         if (data.user.role === 'intern' && !data.user.intern_role) {
           router.replace('/auth/onboarding')
         } else {

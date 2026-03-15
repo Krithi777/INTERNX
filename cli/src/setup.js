@@ -1,4 +1,5 @@
 const simpleGit = require('simple-git');
+const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -6,80 +7,10 @@ const chalk = require('chalk');
 const ora = require('ora');
 const auth = require('./auth');
 
-// ─────────────────────────────────────────────────────────────
-// Recursively creates folders and files from a nested object.
-//
-// DB format:
-// {
-//   "payvault-payments-service": {
-//     "app": {
-//       "core": ["config.py", "database.py"],   ← array = files inside dir
-//       "main.py": null                          ← null  = empty file
-//     },
-//     "README.md": null
-//   }
-// }
-//
-// Rules:
-//   key + object value → directory, recurse
-//   key + array value  → directory, each item in array is an empty file
-//   key + null value   → empty file
-// ─────────────────────────────────────────────────────────────
-function createFolderStructure(projectDir, structure) {
-  let created = 0;
-  let skipped = 0;
-
-  function walk(currentDir, node) {
-    if (Array.isArray(node)) {
-      // Array of filenames — create each as an empty file in currentDir
-      if (!fs.existsSync(currentDir)) fs.mkdirSync(currentDir, { recursive: true });
-      for (const filename of node) {
-        const fullPath = path.join(currentDir, filename);
-        if (!fs.existsSync(fullPath)) {
-          fs.writeFileSync(fullPath, '', 'utf8');
-          created++;
-        } else {
-          skipped++;
-        }
-      }
-    } else if (typeof node === 'object' && node !== null) {
-      // Object — each key is a file (null) or subdirectory (object/array)
-      if (!fs.existsSync(currentDir)) fs.mkdirSync(currentDir, { recursive: true });
-      for (const [key, value] of Object.entries(node)) {
-        const fullPath = path.join(currentDir, key);
-        if (value === null) {
-          // null → empty file
-          if (!fs.existsSync(fullPath)) {
-            fs.writeFileSync(fullPath, '', 'utf8');
-            created++;
-          } else {
-            skipped++;
-          }
-        } else {
-          // object or array → directory, recurse into it
-          if (!fs.existsSync(fullPath)) {
-            fs.mkdirSync(fullPath, { recursive: true });
-            created++;
-          } else {
-            skipped++;
-          }
-          walk(fullPath, value);
-        }
-      }
-    }
-  }
-
-  walk(projectDir, structure);
-  return { created, skipped };
-}
-
-// ─────────────────────────────────────────────────────────────
-// Main
-// ─────────────────────────────────────────────────────────────
-async function run({ repo, branch, token, folderStructure }) {
+async function run({ repo, branch, token, taskId, internxToken, apiUrl }) {
   console.log(chalk.bold.blue('\n🚀 InternX Project Setup\n'));
 
-  // ── Resolve token ──
+  // ── Resolve token (from param or saved login) ──
   const githubToken = token || auth.getToken();
   if (!githubToken) {
     console.log(chalk.yellow('⚠️  No GitHub token found.'));
@@ -96,7 +27,7 @@ async function run({ repo, branch, token, folderStructure }) {
     fs.mkdirSync(baseDir, { recursive: true });
   }
 
-  // ── Step 2: Clone ──
+  // ── Step 2: Clone (skip if already exists) ──
   if (fs.existsSync(projectDir)) {
     console.log(chalk.yellow(`📁 Project already exists at: ${projectDir}`));
     console.log(chalk.gray('   Skipping clone, opening VS Code...\n'));
@@ -107,7 +38,8 @@ async function run({ repo, branch, token, folderStructure }) {
 
     const cloneSpinner = ora(`Cloning ${chalk.cyan(repo)}...`).start();
     try {
-      await simpleGit().clone(cloneUrl, projectDir);
+      const git = simpleGit();
+      await git.clone(cloneUrl, projectDir);
       cloneSpinner.succeed(chalk.green(`Cloned → ${projectDir}`));
     } catch (err) {
       cloneSpinner.fail(chalk.red('Clone failed'));
@@ -123,6 +55,8 @@ async function run({ repo, branch, token, folderStructure }) {
     const branchSpinner = ora(`Creating branch ${chalk.cyan(branch)}...`).start();
     try {
       const repoGit = simpleGit(projectDir);
+
+      // Check if branch already exists on remote
       const remoteBranches = await repoGit.branch(['-r']);
       const branchExists = remoteBranches.all.some(b => b.includes(branch));
 
@@ -140,39 +74,29 @@ async function run({ repo, branch, token, folderStructure }) {
     }
   }
 
-  // ── Step 4: Load folder structure ──
-  // Runs every time (outside clone block) so re-opening works too.
-  // Priority: URL param → internx.json in repo root → nothing
-  if (!folderStructure) {
-    const configPath = path.join(projectDir, 'internx.json');
-    if (fs.existsSync(configPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        folderStructure = config.folderStructure ?? null;
-      } catch {
-        // malformed JSON — skip silently
-      }
-    }
+  // ── Step 4: Write .internx.json — stores task/project metadata locally ──
+  // This lets `internx pr` work without any env vars or extra flags.
+  try {
+    const internxMeta = {
+      repo,
+      branch,
+      task_id:       taskId       || null,
+      internx_token: internxToken || null,
+      api_url:       apiUrl       || 'http://127.0.0.1:8000',
+      created_at: new Date().toISOString(),
+    };
+    fs.writeFileSync(
+      path.join(projectDir, '.internx.json'),
+      JSON.stringify(internxMeta, null, 2)
+    );
+  } catch {
+    // Non-fatal — pr.js will fall back to env var if file is missing
   }
 
-  // ── Step 5: Create folder structure ──
-  // Safe to run every time — skips anything that already exists.
-  if (folderStructure && typeof folderStructure === 'object') {
-    const structSpinner = ora('Creating folder structure...').start();
-    try {
-      const { created, skipped } = createFolderStructure(projectDir, folderStructure);
-      structSpinner.succeed(
-        chalk.green('Folder structure created') +
-        chalk.gray(` (${created} new, ${skipped} already existed)`)
-      );
-    } catch (err) {
-      structSpinner.fail(chalk.red('Folder structure failed'));
-      console.error(chalk.red(err.message));
-      // Non-fatal — keep going
-    }
-  }
-
-  // ── Step 6: Open VS Code ──
+  // ── Step 5: Open VS Code ──
+  // Use spawn detached so VS Code launches independently. execSync can
+  // silently fail when invoked from a browser protocol handler context
+  // because there's no visible shell to inherit the PATH from.
   const vsSpinner = ora('Opening VS Code...').start();
   try {
     const { spawn } = require('child_process');
