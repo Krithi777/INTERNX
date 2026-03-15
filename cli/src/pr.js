@@ -15,6 +15,28 @@ function readMeta(cwd) {
   return {};
 }
 
+// ── Save fields back to .internx.json ──
+function saveMeta(cwd, updates) {
+  try {
+    const p    = path.join(cwd, '.internx.json');
+    const meta = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
+    fs.writeFileSync(p, JSON.stringify({ ...meta, ...updates }, null, 2));
+  } catch {}
+}
+
+// ── Auto-fetch active task ID from InternX backend ──
+async function autoFetchTaskId(internxToken, apiUrl) {
+  try {
+    const res = await axios.get(
+      `${apiUrl}/api/tasks/active-task`,
+      { headers: { Authorization: `Bearer ${internxToken}` } }
+    );
+    return res.data?.task_id || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Fetch the PR diff from GitHub ──
 async function getPrDiff(owner, repo, prNumber, githubToken) {
   try {
@@ -52,10 +74,19 @@ async function run({ message, base }) {
   const git  = simpleGit(cwd);
   const meta = readMeta(cwd);
 
-  // Resolve IDs: .internx.json → env var → null
-  const taskId       = meta.task_id       || process.env.INTERNX_TASK_ID  || null;
-  const internxToken = meta.internx_token || process.env.INTERNX_TOKEN    || null;
-  const apiUrl       = meta.api_url       || process.env.INTERNX_API_URL  || 'http://127.0.0.1:8000';
+  // Resolve tokens: .internx.json → env var → null
+  const internxToken = meta.internx_token || process.env.INTERNX_TOKEN   || null;
+  const apiUrl       = meta.api_url       || process.env.INTERNX_API_URL || 'http://127.0.0.1:8000';
+
+  // ── Auto-fetch task ID from backend (no user input needed) ──
+  // Priority: .internx.json → live fetch from /api/tasks/active-task → null
+  let taskId = meta.task_id || null;
+  if (!taskId && internxToken) {
+    taskId = await autoFetchTaskId(internxToken, apiUrl);
+    if (taskId) {
+      saveMeta(cwd, { task_id: taskId });  // cache for next run
+    }
+  }
 
   // ── Git repo check ──
   if (!(await git.checkIsRepo())) {

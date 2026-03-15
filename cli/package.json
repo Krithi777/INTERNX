@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "InternX CLI - Setup projects in VS Code instantly",
   "bin": {
-    "internx": "./internx.js"
+    "internx": "./bin/internx.js"
   },
   "scripts": {
     "postinstall": "node postinstall.js"

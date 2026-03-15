@@ -66,8 +66,9 @@ program
   .description('Commit, push and create a Pull Request')
   .option('--message <message>', 'Commit + PR title', 'Work complete')
   .option('--base <base>', 'Base branch to merge into', 'main')
+  .option('--dry-run', 'Show resolved config without any git operations')
   .action(async (options) => {
-    await pr.run(options);
+    await pr.run({ ...options, dryRun: options.dryRun });
   });
 
 // ─────────────────────────────────────────────
