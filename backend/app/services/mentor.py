@@ -133,6 +133,7 @@ async def review_pr(task_id: str, pr_diff: str) -> dict:
     prompt = build_review_prompt(
         role=role,
         task_title=task.get("title", ""),
+        task_description=task.get("description", ""),
         pr_diff=pr_diff,
     )
 

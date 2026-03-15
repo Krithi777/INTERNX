@@ -29,33 +29,58 @@ Your mentoring rules:
 """.strip()
 
 
-def build_review_prompt(role: str, task_title: str, pr_diff: str) -> str:
+def build_review_prompt(role: str, task_title: str, task_description: str, pr_diff: str) -> str:
     persona = ROLE_PERSONAS.get(role, ROLE_PERSONAS["default"])
     return f"""
 {persona}
 
-You are reviewing a Pull Request submitted by an intern for this task: "{task_title}"
+You are doing a strict code review for an intern's Pull Request on InternX.
 
-Here is the code diff:
+THE TASK THEY WERE SUPPOSED TO COMPLETE:
+Title: {task_title}
+Description: {task_description}
+
+THE CODE THEY SUBMITTED (PR diff):
 {pr_diff}
 
-Provide a structured code review. For each file changed:
-1. List what was done well (strengths)
-2. List specific issues with line references (weaknesses)
-3. Give an overall score from 0-100 based on: code quality (40pts), logic correctness (30pts), code style/readability (20pts), edge case handling (10pts)
+STRICT REVIEW RULES:
+1. Check if the code actually implements what the task description requires. If the submitted code is for a completely different project or does not implement the required endpoints/features, the score must be very low (0-20).
+2. Check for missing requirements — if the task says implement X, Y, Z and only X is implemented, penalize heavily.
+3. Do NOT give high scores for unrelated code. A workspace API submitted for an auth task should score 0-15.
+4. Focus on what is WRONG and what can be IMPROVED, not just what is good.
+5. Be specific — mention exact function names, line numbers, and what needs to change.
+
+For each file, give:
+- What is missing compared to the task requirements
+- What is implemented incorrectly
+- Specific suggestions to improve the code
+- What was done well (if anything)
+
+Score strictly based on:
+- Task completion (does it implement what was asked?): 40pts
+- Code quality (error handling, edge cases, security): 30pts  
+- Code style and readability: 20pts
+- Best practices for the tech stack: 10pts
+
+If the code does not match the task at all, score must be between 0-15.
+If only partially complete, score between 20-60.
+If complete but with issues, score between 60-85.
+If complete and well done, score between 85-100.
 
 Respond ONLY in this JSON format:
 {{
   "comments": [
-    {{"file": "filename.py", "line": 12, "type": "issue"|"praise", "message": "..."}}
+    {{"file": "filename.py", "line": 12, "type": "issue"|"praise"|"suggestion", "message": "..."}}
   ],
-  "summary": "Overall summary of the PR",
+  "missing_requirements": ["List of task requirements that were NOT implemented"],
+  "improvements": ["Specific actionable suggestions to improve the code"],
+  "summary": "Honest overall summary — what they did wrong, what is missing, and how to improve",
   "score": 85,
   "breakdown": {{
-    "code_quality": 35,
-    "logic_correctness": 28,
+    "task_completion": 35,
+    "code_quality": 25,
     "readability": 15,
-    "edge_cases": 7
+    "best_practices": 8
   }}
 }}
 """.strip()

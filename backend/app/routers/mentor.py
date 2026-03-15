@@ -69,12 +69,34 @@ async def trigger_review(
             print(f"Starting review for task {task_id}")
             review = await mentor_service.review_pr(task_id=task_id, pr_diff=pr_diff)
             print(f"Review result: {review}")
+
+            improvements = review.get("improvements", [])
+            missing = review.get("missing_requirements", [])
+
+            feedback_parts = []
+            if review.get("summary"):
+                feedback_parts.append(review["summary"])
+            if missing:
+                feedback_parts.append("Missing: " + ", ".join(missing))
+            if improvements:
+                feedback_parts.append("Improve: " + " | ".join(improvements))
+
+            full_feedback = "\n\n".join(feedback_parts)
+
+            score = review.get("score", 0)
+            new_status = "done" if score >= 70 else "in_progress"
+
             db.table("tasks").update({
-                "score": review.get("score"),
-                "feedback": review.get("summary"),
-                "status": "done",
+                "score": score,
+                "feedback": full_feedback,
+                "status": new_status,
             }).eq("id", task_id).execute()
-            print(f"Score saved: {review.get('score')}")
+
+            if new_status == "in_progress":
+                print(f"Score {score} is below 70 — task remains in progress")
+            else:
+                print(f"Score {score} — task marked as done")
+
         except Exception as e:
             print(f"Review failed: {e}")
 

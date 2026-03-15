@@ -29,7 +29,19 @@ export default function TaskDetailPage() {
   const [prUrl,         setPrUrl]         = useState('')
   const [showPrInput,   setShowPrInput]   = useState(false)
 
-  useEffect(() => { loadTask() }, [id])
+  useEffect(() => {
+    if (id) {
+      localStorage.setItem("current_task_id", id)
+      loadTask()
+    }
+  }, [id])
+
+  // Auto-refresh every 5 seconds if task is in review
+  useEffect(() => {
+    if (task?.status !== 'review') return
+    const interval = setInterval(() => { loadTask() }, 5000)
+    return () => clearInterval(interval)
+  }, [task?.status])
 
   const loadTask = async () => {
     try {
@@ -61,7 +73,6 @@ export default function TaskDetailPage() {
     if (!prUrl.trim()) return
     setActionLoading(true)
     try {
-      // submitPR patches github_pr_url and moves status to review
       await taskApi.submitPR(task.id, prUrl.trim())
       await taskApi.updateStatus(task.id, 'review')
       const res = await taskApi.getTask(task.id)
@@ -91,6 +102,8 @@ export default function TaskDetailPage() {
     ? new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null
   const resources = task.resources ? task.resources.split('\n').filter(Boolean) : []
+  const hasScore  = task.score !== null && task.score !== undefined
+  const passed    = hasScore && task.score >= 70
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface)' }}>
@@ -160,24 +173,51 @@ export default function TaskDetailPage() {
             </div>
           )}
 
-          {/* Done — score & feedback */}
-          {task.status === 'done' && (
-            <div className="card p-6 mb-5" style={{ border: '1.5px solid var(--green)', background: 'var(--green-soft)' }}>
+          {/* Score & Feedback card — shows for both done and in_progress with score */}
+          {hasScore && (
+            <div className="card p-6 mb-5" style={{
+              border: `1.5px solid ${passed ? 'var(--green)' : '#ef4444'}`,
+              background: passed ? 'var(--green-soft)' : '#fff5f5'
+            }}>
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--green)' }}>
-                  <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ background: passed ? 'var(--green)' : '#ef4444' }}>
+                  {passed ? (
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
                 </div>
-                <h3 className="text-sm font-semibold font-display" style={{ color: '#065f46' }}>Task Completed</h3>
-                {task.score !== null && task.score !== undefined && (
-                  <span className="ml-auto text-2xl font-display font-bold" style={{ color: 'var(--green)' }}>
-                    {task.score}/100
-                  </span>
-                )}
+                <h3 className="text-sm font-semibold font-display"
+                  style={{ color: passed ? '#065f46' : '#991b1b' }}>
+                  {passed ? 'AI Review Complete — Task Passed!' : 'AI Review Complete — Needs Improvement'}
+                </h3>
+                <span className="ml-auto text-2xl font-display font-bold"
+                  style={{ color: passed ? 'var(--green)' : '#ef4444' }}>
+                  {task.score}/100
+                </span>
               </div>
+
+              {!passed && (
+                <div className="mb-3 p-3 rounded-lg" style={{ background: '#fee2e2', border: '1px solid #fecaca' }}>
+                  <p className="text-sm font-semibold" style={{ color: '#991b1b', margin: 0 }}>
+                    ⚠️ Score below 70 — Task not completed yet
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: '#b91c1c', margin: '4px 0 0 0' }}>
+                    Review the feedback below, improve your code and resubmit using <code>internx pr</code>
+                  </p>
+                </div>
+              )}
+
               {task.feedback && (
-                <p className="text-sm leading-relaxed" style={{ color: '#065f46' }}>{task.feedback}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-line"
+                  style={{ color: passed ? '#065f46' : '#991b1b' }}>
+                  {task.feedback}
+                </p>
               )}
             </div>
           )}
@@ -229,13 +269,22 @@ export default function TaskDetailPage() {
               )
             )}
 
-            {task.status === 'review' && (
+            {task.status === 'review' && (task.score === null || task.score === undefined) && (
               <div className="flex items-center gap-3 p-4 rounded-xl"
                 style={{ background: 'var(--amber-soft)', border: '1.5px solid #fde68a' }}>
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--amber)' }} />
                 <span className="text-sm font-medium" style={{ color: '#92400e' }}>
                   Waiting for mentor review...
                 </span>
+              </div>
+            )}
+
+            {task.status === 'in_progress' && hasScore && !passed && (
+              <div className="mt-3 p-3 rounded-xl text-center"
+                style={{ background: '#fff5f5', border: '1px solid #fecaca' }}>
+                <p className="text-sm font-medium" style={{ color: '#991b1b' }}>
+                  Fix the issues above and run <code style={{ background: '#fee2e2', padding: '1px 6px', borderRadius: 4 }}>internx pr</code> again to resubmit
+                </p>
               </div>
             )}
 
