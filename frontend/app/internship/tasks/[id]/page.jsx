@@ -29,7 +29,12 @@ export default function TaskDetailPage() {
   const [prUrl,         setPrUrl]         = useState('')
   const [showPrInput,   setShowPrInput]   = useState(false)
 
-  useEffect(() => { loadTask() }, [id])
+  useEffect(() => {
+  if (id) {
+    localStorage.setItem("current_task_id", id);
+    loadTask();
+  }
+}, [id]);
 
   const loadTask = async () => {
     try {
@@ -137,6 +142,7 @@ export default function TaskDetailPage() {
             {task.description && (
               <>
                 <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--ink-muted)' }}>Description</h3>
+                
                 <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-soft)' }}>{task.description}</p>
               </>
             )}
@@ -161,7 +167,7 @@ export default function TaskDetailPage() {
           )}
 
           {/* Done — score & feedback */}
-          {task.status === 'done' && (
+          {(task.status === 'done' || (task.status === 'review' && task.score !== null && task.score !== undefined)) && (
             <div className="card p-6 mb-5" style={{ border: '1.5px solid var(--green)', background: 'var(--green-soft)' }}>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--green)' }}>
@@ -169,8 +175,7 @@ export default function TaskDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-sm font-semibold font-display" style={{ color: '#065f46' }}>Task Completed</h3>
-                {task.score !== null && task.score !== undefined && (
+                <h3 className="text-sm font-semibold font-display" style={{ color: '#065f46' }}>AI Review Complete</h3>{task.score !== null && task.score !== undefined && (
                   <span className="ml-auto text-2xl font-display font-bold" style={{ color: 'var(--green)' }}>
                     {task.score}/100
                   </span>
@@ -229,7 +234,7 @@ export default function TaskDetailPage() {
               )
             )}
 
-            {task.status === 'review' && (
+            {task.status === 'review' && (task.score === null || task.score === undefined) && (
               <div className="flex items-center gap-3 p-4 rounded-xl"
                 style={{ background: 'var(--amber-soft)', border: '1.5px solid #fde68a' }}>
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--amber)' }} />

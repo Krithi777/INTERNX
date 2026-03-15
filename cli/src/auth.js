@@ -11,13 +11,23 @@ function saveToken(token) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
   }
 
-  const config = { github_token: token, saved_at: new Date().toISOString() };
+  const existing = getConfig();
+  const config = { ...existing, github_token: token, saved_at: new Date().toISOString() };
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 
   console.log(chalk.green('\n✅ GitHub token saved!'));
   console.log(chalk.gray(`   Stored at: ${CONFIG_FILE}`));
   console.log(chalk.gray('\n   You can now run:'));
   console.log(chalk.cyan('   internx pr --message "Your message"\n'));
+}
+
+function saveInternxToken(token) {
+  if (!fs.existsSync(CONFIG_DIR)) {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  }
+  const existing = getConfig();
+  const config = { ...existing, internx_token: token, saved_at: new Date().toISOString() };
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
 function getToken() {
@@ -30,6 +40,25 @@ function getToken() {
   }
 }
 
+function getInternxToken() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return null;
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    return config.internx_token || null;
+  } catch {
+    return null;
+  }
+}
+
+function getConfig() {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return {};
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
 function clearToken() {
   if (fs.existsSync(CONFIG_FILE)) {
     fs.unlinkSync(CONFIG_FILE);
@@ -39,4 +68,4 @@ function clearToken() {
   }
 }
 
-module.exports = { saveToken, getToken, clearToken };
+module.exports = { saveToken, getToken, saveInternxToken, getInternxToken, clearToken };

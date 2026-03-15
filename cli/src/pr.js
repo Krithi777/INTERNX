@@ -22,7 +22,7 @@ async function run({ message, base }) {
     process.exit(1);
   }
 
-  console.log(chalk.bold.blue('\n📤 InternX — Submit for Review\n'));
+  console.log(chalk.bold.blue('\n📤 InternX — Commit → Push → PR → AI Review\n'));
 
   // ── Step 1: Stage all changes ──
   const stageSpinner = ora('Staging changes...').start();
@@ -46,7 +46,6 @@ async function run({ message, base }) {
     await git.commit(message);
     commitSpinner.succeed(chalk.green('Committed'));
   } catch (err) {
-    // If nothing to commit, keep going
     commitSpinner.warn(chalk.yellow('Nothing new to commit, pushing existing commits...'));
   }
 
@@ -69,14 +68,79 @@ async function run({ message, base }) {
   let owner, repo;
   try {
     const remote = (await git.remote(['get-url', 'origin'])).trim();
-    // Handles both https and ssh formats
-    const match = remote.match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
-    if (!match) throw new Error('Could not parse GitHub repo from remote URL');
-    owner = match[1];
-    repo  = match[2];
+    const cleaned = remote.replace(/\.git$/, '').replace(/[\s/]+$/, '');
+    const parts = cleaned.split(/github\.com[/:]/);
+    if (parts.length < 2) throw new Error('Cannot parse repo from: ' + remote);
+    const segments = parts[1].split('/');
+    owner = segments[0];
+    repo  = segments[1];
+    if (!owner || !repo) throw new Error('Cannot parse repo from: ' + remote);
   } catch (err) {
     console.error(chalk.red('\n❌ Could not determine GitHub repo:'), err.message);
     process.exit(1);
+  }
+
+  // ── Helper: auto-detect task ID ──
+  async function getTaskId() {
+    // 1. Check env var first
+    if (process.env.INTERNX_TASK_ID) return process.env.INTERNX_TASK_ID;
+
+    // 2. Check local .internx.json in current folder
+    try {
+      const localConfig = JSON.parse(require('fs').readFileSync('.internx.json', 'utf8'));
+      if (localConfig.task_id) return localConfig.task_id;
+    } catch {}
+
+    // 3. Auto-fetch from backend using InternX token
+    try {
+      const internxToken = auth.getInternxToken();
+      if (internxToken) {
+        const backendUrl = process.env.INTERNX_BACKEND_URL || 'http://localhost:8000';
+        const taskRes = await axios.get(
+          `${backendUrl}/api/tasks/active-task`,
+          { headers: { Authorization: `Bearer ${internxToken}` } }
+        );
+        if (taskRes.data.task_id) {
+          console.log(chalk.gray(`   Auto-detected task: ${taskRes.data.title}`));
+          return taskRes.data.task_id;
+        }
+      }
+    } catch {}
+
+    return null;
+  }
+
+  // ── Helper: trigger AI review ──
+  async function triggerReview(prNumber) {
+    const reviewSpinner = ora('Requesting AI code review...').start();
+    try {
+      const diff = await axios.get(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`,
+        {
+          headers: {
+            Authorization: `token ${token}`,
+            Accept: 'application/vnd.github.v3.diff',
+          }
+        }
+      );
+
+      const taskId = await getTaskId();
+      if (!taskId) {
+        reviewSpinner.warn(chalk.yellow('No active task found — skipping AI review.'));
+        return;
+      }
+
+      const backendUrl = process.env.INTERNX_BACKEND_URL || 'http://localhost:8000';
+      await axios.post(
+        `${backendUrl}/api/mentor/review`,
+        { task_id: taskId, pr_diff: diff.data },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      reviewSpinner.succeed(chalk.green('AI review started — check your task for feedback shortly.'));
+    } catch (reviewErr) {
+      reviewSpinner.warn(chalk.yellow('AI review could not be triggered (non-fatal).'));
+      console.error(chalk.gray('   Review error: ' + reviewErr.message));
+    }
   }
 
   // ── Step 5: Create Pull Request ──
@@ -103,20 +167,40 @@ async function run({ message, base }) {
     console.log(chalk.gray('   PR Title  : ') + chalk.white(message));
     console.log(chalk.gray('   Branch    : ') + chalk.white(`${branch} → ${base}`));
     console.log(chalk.gray('   PR Link   : ') + chalk.cyan.underline(response.data.html_url));
+
+    await triggerReview(response.data.number);
+
     console.log(chalk.bold.gray('\n   AI review will begin shortly and post comments on your PR.\n'));
 
   } catch (err) {
-    prSpinner.fail(chalk.red('Failed to create PR'));
-
     if (err.response?.status === 422) {
-      console.log(chalk.yellow('\n⚠️  A PR from this branch already exists.'));
-      console.log(chalk.gray(`   Check: https://github.com/${owner}/${repo}/pulls\n`));
+      prSpinner.warn(chalk.yellow('PR already exists — triggering review on existing PR...'));
+      try {
+        const prs = await axios.get(
+          `https://api.github.com/repos/${owner}/${repo}/pulls?head=${owner}:${branch}&state=open`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (prs.data.length > 0) {
+          const prNumber = prs.data[0].number;
+          console.log(chalk.gray(`   Found existing PR #${prNumber}`));
+          console.log(chalk.gray(`   PR Link: https://github.com/${owner}/${repo}/pull/${prNumber}`));
+          await triggerReview(prNumber);
+          console.log(chalk.bold.gray('\n   AI review will begin shortly.\n'));
+        } else {
+          console.log(chalk.yellow('   No open PR found for this branch.\n'));
+        }
+      } catch (e) {
+        console.log(chalk.gray('   Could not find existing PR: ' + e.message));
+      }
     } else if (err.response?.status === 401) {
+      prSpinner.fail(chalk.red('Failed to create PR'));
       console.log(chalk.red('\n❌ Token unauthorized. Re-run: internx login --token ghp_xxx\n'));
+      process.exit(1);
     } else {
+      prSpinner.fail(chalk.red('Failed to create PR'));
       console.error(chalk.red(err.response?.data?.message || err.message));
+      process.exit(1);
     }
-    process.exit(1);
   }
 }
 

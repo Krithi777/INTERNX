@@ -76,6 +76,18 @@ program
     auth.saveToken(options.token);
   });
 
+//internx token
+
+program
+  .command('set-token')
+  .description('Save your InternX JWT token for auto task detection')
+  .requiredOption('--token <token>', 'InternX JWT token')
+  .action((options) => {
+    auth.saveInternxToken(options.token);
+    console.log(chalk.green('✅ InternX token saved!'));
+  });
+
+  
 // ─────────────────────────────────────────────
 // internx status
 // Show current project info
