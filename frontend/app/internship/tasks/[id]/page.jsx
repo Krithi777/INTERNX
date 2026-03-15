@@ -75,10 +75,36 @@ export default function TaskDetailPage() {
     try {
       await taskApi.submitPR(task.id, prUrl.trim())
       await taskApi.updateStatus(task.id, 'review')
+
+      // Trigger AI review automatically
+      try {
+        // Fetch the PR diff from GitHub
+        const prUrlObj = new URL(prUrl.trim())
+        const parts = prUrlObj.pathname.split('/')
+        const owner = parts[1]
+        const repo = parts[2]
+        const prNumber = parts[4]
+
+        const diffRes = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`,
+          { headers: { Accept: 'application/vnd.github.v3.diff' } }
+        )
+        const diff = await diffRes.text()
+
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+        await fetch(`${backendUrl}/api/mentor/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task_id: task.id, pr_diff: diff }),
+        })
+        toast.success('PR submitted! AI review started 🤖')
+      } catch {
+        toast.success('PR submitted for review! 🚀')
+      }
+
       const res = await taskApi.getTask(task.id)
       setTask(res.data)
       setShowPrInput(false)
-      toast.success('PR submitted for review! 🚀')
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Failed to submit PR')
     } finally {
