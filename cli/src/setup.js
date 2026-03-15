@@ -7,7 +7,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 const auth = require('./auth');
 
-async function run({ repo, branch, token }) {
+async function run({ repo, branch, token, taskId, internxToken, apiUrl }) {
   console.log(chalk.bold.blue('\n🚀 InternX Project Setup\n'));
 
   // ── Resolve token (from param or saved login) ──
@@ -74,7 +74,26 @@ async function run({ repo, branch, token }) {
     }
   }
 
-  // ── Step 4: Open VS Code ──
+  // ── Step 4: Write .internx.json — stores task/project metadata locally ──
+  // This lets `internx pr` work without any env vars or extra flags.
+  try {
+    const internxMeta = {
+      repo,
+      branch,
+      task_id:       taskId       || null,
+      internx_token: internxToken || null,
+      api_url:       apiUrl       || 'http://127.0.0.1:8000',
+      created_at: new Date().toISOString(),
+    };
+    fs.writeFileSync(
+      path.join(projectDir, '.internx.json'),
+      JSON.stringify(internxMeta, null, 2)
+    );
+  } catch {
+    // Non-fatal — pr.js will fall back to env var if file is missing
+  }
+
+  // ── Step 5: Open VS Code ──
   // Use spawn detached so VS Code launches independently. execSync can
   // silently fail when invoked from a browser protocol handler context
   // because there's no visible shell to inherit the PATH from.

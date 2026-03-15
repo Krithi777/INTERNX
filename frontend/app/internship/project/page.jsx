@@ -197,8 +197,10 @@ export default function ProjectPage() {
       }
 
       setProject(projectData)
-      // user_repo_url is the per-user repo URL returned by the backend
-      setUserRepoUrl(projectData.user_repo_url || '')
+      // FIX: initialise both states from the loaded data
+      const savedRepo = projectData.user_repo_url || ''
+      setUserRepoUrl(savedRepo)
+      setRepoInput(savedRepo)
     } catch (err) {
       console.error('Failed to load project', err)
     } finally {
@@ -224,6 +226,12 @@ export default function ProjectPage() {
   }
 
   const handleVsCodeConnect = async () => {
+    // FIX: guard — repo URL must be saved before proceeding
+    if (!userRepoUrl) {
+      setActiveTab('overview')
+      return
+    }
+
     setVsCodeConnecting(true)
     setVsCodeError(null)
     setShowOpenPrompt(false)
@@ -317,44 +325,62 @@ export default function ProjectPage() {
               </div>
             </div>
 
-            {/* VS Code Connect Button — unchanged */}
-            <div className="flex-shrink-0 flex items-center gap-2">
-              <button onClick={() => setShowGuide(true)} title="Setup guide"
-                className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-muted)' }}>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-                </svg>
-              </button>
-              {vsCodeConnected ? (
-                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0' }}>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            {/* VS Code Connect Button */}
+            <div className="flex-shrink-0 flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowGuide(true)} title="Setup guide"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:opacity-80"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-muted)' }}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
                   </svg>
-                  VS Code Connected
-                </div>
-              ) : (
-                <button onClick={handleVsCodeConnect} disabled={vsCodeConnecting}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
-                  style={{ background: '#24292e', color: 'white', opacity: vsCodeConnecting ? 0.7 : 1 }}>
-                  {vsCodeConnecting ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M23.15 2.587L18.21.21a1.494 1.494 0 00-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 00-1.276.057L.327 7.261A1 1 0 00.326 8.74L3.899 12 .326 15.26a1 1 0 00.001 1.479L1.65 17.94a.999.999 0 001.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 001.704.29l4.942-2.377A1.5 1.5 0 0024 19.86V4.14a1.5 1.5 0 00-.85-1.553zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
-                      </svg>
-                      Connect VS Code
-                    </>
-                  )}
                 </button>
+                {vsCodeConnected ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0' }}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    VS Code Connected
+                  </div>
+                ) : (
+                  // FIX: disabled when no repo URL saved
+                  <button
+                    onClick={handleVsCodeConnect}
+                    disabled={vsCodeConnecting || !userRepoUrl}
+                    title={!userRepoUrl ? 'Add your GitHub repo URL in the Overview tab first' : ''}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    style={{ background: '#24292e', color: 'white', opacity: vsCodeConnecting || !userRepoUrl ? 0.5 : 1 }}>
+                    {vsCodeConnecting ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M23.15 2.587L18.21.21a1.494 1.494 0 00-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 00-1.276.057L.327 7.261A1 1 0 00.326 8.74L3.899 12 .326 15.26a1 1 0 00.001 1.479L1.65 17.94a.999.999 0 001.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 001.704.29l4.942-2.377A1.5 1.5 0 0024 19.86V4.14a1.5 1.5 0 00-.85-1.553zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
+                        </svg>
+                        Connect VS Code
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              {/* FIX: hint when repo URL is missing */}
+              {!userRepoUrl && !vsCodeConnected && (
+                <p className="text-xs" style={{ color: '#b45309' }}>
+                  ⚠️ Add your repo URL in{' '}
+                  <button
+                    onClick={() => setActiveTab('overview')}
+                    className="underline font-semibold hover:opacity-80">
+                    Overview
+                  </button>{' '}
+                  first
+                </p>
               )}
             </div>
           </div>
@@ -465,8 +491,11 @@ export default function ProjectPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <input type="url" value={editingRepo ? repoInput : userRepoUrl}
-                        onChange={e => editingRepo ? setRepoInput(e.target.value) : setUserRepoUrl(e.target.value)}
+                      {/* FIX: always use repoInput as the controlled value */}
+                      <input
+                        type="url"
+                        value={repoInput}
+                        onChange={e => setRepoInput(e.target.value)}
                         placeholder="https://github.com/you/your-repo"
                         className="w-full px-3 py-2 rounded-lg text-xs font-mono outline-none transition-all"
                         style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink)' }}
@@ -475,13 +504,15 @@ export default function ProjectPage() {
                       />
                       {repoError && <p className="text-xs" style={{ color: '#dc2626' }}>{repoError}</p>}
                       <div className="flex gap-2">
-                        <button onClick={handleSaveRepo} disabled={repoSaving || !(editingRepo ? repoInput : userRepoUrl).trim()}
+                        <button
+                          onClick={handleSaveRepo}
+                          disabled={repoSaving || !repoInput.trim()}
                           className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40"
                           style={{ background: '#24292e', color: 'white' }}>
                           {repoSaving ? 'Saving...' : repoSaved ? '✓ Saved!' : 'Save Repo URL'}
                         </button>
                         {editingRepo && (
-                          <button onClick={() => setEditingRepo(false)}
+                          <button onClick={() => { setRepoInput(userRepoUrl); setEditingRepo(false) }}
                             className="px-3 py-2 rounded-lg text-xs font-semibold"
                             style={{ background: 'var(--surface-2)', color: 'var(--ink-muted)' }}>
                             Cancel
@@ -575,11 +606,23 @@ export default function ProjectPage() {
                       </div>
                     ))}
                   </div>
-                  <button onClick={handleVsCodeConnect} disabled={vsCodeConnected || vsCodeConnecting}
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
-                    style={{ background: vsCodeConnected ? '#dcfce7' : '#24292e', color: vsCodeConnected ? '#16a34a' : 'white' }}>
+                  {/* FIX: disabled + hint when no repo saved */}
+                  <button
+                    onClick={handleVsCodeConnect}
+                    disabled={vsCodeConnected || vsCodeConnecting || !userRepoUrl}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed"
+                    style={{ background: vsCodeConnected ? '#dcfce7' : '#24292e', color: vsCodeConnected ? '#16a34a' : 'white', opacity: !userRepoUrl ? 0.5 : 1 }}>
                     {vsCodeConnected ? '✓ Connected' : vsCodeConnecting ? 'Connecting...' : '→ Connect VS Code'}
                   </button>
+                  {!userRepoUrl && !vsCodeConnected && (
+                    <p className="text-xs mt-2 text-center" style={{ color: '#b45309' }}>
+                      ⚠️ Add your GitHub repo in the{' '}
+                      <button onClick={() => setActiveTab('overview')} className="underline font-semibold hover:opacity-80">
+                        Overview tab
+                      </button>{' '}
+                      first
+                    </p>
+                  )}
                   {vsCodeConnecting && (
                     <div className="mt-3 p-3 rounded-xl text-xs animate-fade-up" style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde68a' }}>
                       <p className="font-semibold mb-0.5">👀 Watch for a browser popup!</p>

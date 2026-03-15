@@ -21,12 +21,15 @@ program
     try {
       const parsed = new URL(url);
       const command = parsed.hostname;         // "setup"
-      const repo    = parsed.searchParams.get('repo');
-      const branch  = parsed.searchParams.get('branch');
-      const token   = parsed.searchParams.get('token');
+      const repo          = parsed.searchParams.get('repo');
+      const branch        = parsed.searchParams.get('branch');
+      const token         = parsed.searchParams.get('token');
+      const taskId        = parsed.searchParams.get('task_id');
+      const internxToken  = parsed.searchParams.get('internx_token');
+      const apiUrl        = parsed.searchParams.get('api_url');
 
       if (command === 'setup') {
-        await setup.run({ repo, branch, token });
+        await setup.run({ repo, branch, token, taskId, internxToken, apiUrl });
       } else {
         console.error(`Unknown command in URL: ${command}`);
         process.exit(1);
@@ -47,8 +50,11 @@ program
   .requiredOption('--repo <repo>', 'GitHub repo (e.g. internx-org/frontend-app)')
   .requiredOption('--branch <branch>', 'Branch name (e.g. john-dev)')
   .option('--token <token>', 'GitHub auth token')
+  .option('--task-id <taskId>', 'InternX task ID (auto-set by the web app)')
+  .option('--internx-token <internxToken>', 'InternX API token (auto-set by the web app)')
+  .option('--api-url <apiUrl>', 'InternX backend URL (auto-set by the web app)')
   .action(async (options) => {
-    await setup.run(options);
+    await setup.run({ ...options, taskId: options.taskId, internxToken: options.internxToken, apiUrl: options.apiUrl });
   });
 
 // ─────────────────────────────────────────────

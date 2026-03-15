@@ -198,8 +198,35 @@ async def get_setup_token(project_id: str, current_user: dict = Depends(get_curr
         except Exception:
             folder_structure = None
 
+    # ── Resolve task_id so the CLI writes it into .internx.json automatically ──
+    # This means `internx pr` works with zero env vars after setup.
+    task_id = None
+    try:
+        task_result = db.table("tasks").select("id") \
+            .eq("project_id", project_id) \
+            .eq("assigned_to", current_user["id"]) \
+            .order("created_at", desc=False) \
+            .limit(1) \
+            .execute()
+        if task_result.data:
+            task_id = task_result.data[0]["id"]
+    except Exception:
+        pass  # non-fatal — CLI falls back to $INTERNX_TASK_ID env var if absent
+
     setup_url = f"internx://setup?repo={repo}&branch={branch}&token={token}"
+    if task_id:
+        setup_url += f"&task_id={task_id}"
+    # InternX JWT — lets CLI call /api/mentor/review without extra login
+    internx_token = jwt.encode(
+        {"user_id": current_user["id"], "exp": time.time() + 86400 * 30},  # 30 days
+        settings.jwt_secret,
+        algorithm="HS256"
+    )
+    setup_url += f"&internx_token={internx_token}"
+    # Backend URL — CLI needs this to know where to POST /api/mentor/review
+    backend_url = getattr(settings, "backend_url", "http://127.0.0.1:8000")
+    setup_url += f"&api_url={quote(backend_url)}"
     if folder_structure:
         setup_url += f"&folderStructure={quote(json.dumps(folder_structure))}"
 
-    return {"setup_url": setup_url, "repo": repo, "branch": branch, "expires_in": 300}
+    return {"setup_url": setup_url, "repo": repo, "branch": branch, "task_id": task_id, "expires_in": 300}
