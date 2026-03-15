@@ -14,6 +14,35 @@ class PRReviewRequest(BaseModel):
     task_id: str
     pr_diff: str
 
+class ProjectChatRequest(BaseModel):
+    message: str
+    user_id: str
+    project_context: str = ""
+
+@router.post("/project-chat")
+async def project_chat(body: ProjectChatRequest):
+    """REST endpoint for project-level mentor chat (no task ID needed)."""
+    from groq import Groq
+    from app.core.config import settings
+
+    ai_client = Groq(api_key=settings.groq_api_key)
+
+    system_prompt = f"""You are an AI mentor for a software engineering intern on InternX.
+
+The intern is working on this project:
+{body.project_context}
+
+Help them understand the project, plan their work, answer technical questions, and guide them through their internship.
+Be specific to this project context. Keep answers concise and practical."""
+
+    response = ai_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": body.message}
+        ],
+    )
+    return {"reply": response.choices[0].message.content}
 
 @router.websocket("/chat/{task_id}")
 async def mentor_chat(task_id: str, websocket: WebSocket):
