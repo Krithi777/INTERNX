@@ -15,6 +15,7 @@ function MentorChat() {
   const [isTyping, setIsTyping] = useState(false)
   const [task, setTask] = useState(null)
   const [project, setProject] = useState(null)
+  const [showSuggestions, setShowSuggestions] = useState(true)
   const wsRef = useRef(null)
   const bottomRef = useRef(null)
 
@@ -108,12 +109,13 @@ function MentorChat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = async () => {
-    if (!input.trim()) return
+  const sendMessage = async (overrideText) => {
+    const userMessage = overrideText || input
+    if (!userMessage.trim()) return
     if (!userId) { alert('Please login first'); return }
 
-    const userMessage = input
     setInput('')
+    setShowSuggestions(false)
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
 
     if (taskId && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -136,8 +138,10 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
           project_context: projectContext,
         })
         setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply, streaming: false }])
+        setShowSuggestions(true)
       } catch {
         setMessages(prev => [...prev, { role: 'error', content: 'Could not get a response. Please try again.' }])
+        setShowSuggestions(true)
       } finally {
         setIsTyping(false)
       }
@@ -164,6 +168,37 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
 
   const displayName = task ? task.title : (project?._name || '')
   const displayDesc = task?.description || project?._desc || ''
+
+  const renderMarkdown = (text) => {
+    const lines = text.split('\n')
+    const elements = []
+    let key = 0
+    for (const line of lines) {
+      // Numbered list
+      const numMatch = line.match(/^(\d+)\.\s\*\*(.+?)\*\*:?\s*(.*)/)
+      if (numMatch) {
+        elements.push(<div key={key++} style={{ marginBottom: 4 }}><strong>{numMatch[1]}. {numMatch[2]}</strong>{numMatch[3] ? `: ${numMatch[3]}` : ''}</div>)
+        continue
+      }
+      // Bullet with bold
+      const bulletBold = line.match(/^\*\s\*\*(.+?)\*\*:?\s*(.*)/)
+      if (bulletBold) {
+        elements.push(<div key={key++} style={{ marginBottom: 4, paddingLeft: 12 }}>• <strong>{bulletBold[1]}</strong>{bulletBold[2] ? `: ${bulletBold[2]}` : ''}</div>)
+        continue
+      }
+      // Plain bullet
+      const bullet = line.match(/^\*\s(.+)/)
+      if (bullet) {
+        elements.push(<div key={key++} style={{ marginBottom: 4, paddingLeft: 12 }}>• {bullet[1]}</div>)
+        continue
+      }
+      // Bold inline: replace **text** with <strong>
+      const parts = line.split(/\*\*(.+?)\*\*/)
+      const rendered = parts.map((p, i) => i % 2 === 1 ? <strong key={i}>{p}</strong> : p)
+      elements.push(<div key={key++} style={{ marginBottom: line === '' ? 8 : 2 }}>{rendered}</div>)
+    }
+    return elements
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--surface)', color: 'var(--ink)', fontFamily: 'sans-serif' }}>
@@ -234,7 +269,7 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
               fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap',
               border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
             }}>
-              {msg.content}
+              {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
               {msg.streaming && isTyping && (
                 <span style={{ display: 'inline-block', width: 6, height: 14, background: 'var(--ink-muted)', marginLeft: 3, animation: 'blink 1s infinite', borderRadius: 2 }} />
               )}
@@ -245,10 +280,10 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
       </div>
 
       {/* Quick suggestion chips */}
-      {messages.length <= 1 && (
+      {showSuggestions && (
         <div style={{ padding: '0 20px 12px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(taskId ? taskSuggestions : projectSuggestions).map(suggestion => (
-            <button key={suggestion} onClick={() => setInput(suggestion)}
+            <button key={suggestion} onClick={() => sendMessage(suggestion)}
               style={{
                 padding: '6px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
                 background: 'var(--surface-2)', border: '1px solid var(--border)',

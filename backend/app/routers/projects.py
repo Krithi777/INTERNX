@@ -289,9 +289,10 @@ def _save_user_repo_url(project_id: str, user_id: str, repo_url: str):
         db.table("user_projects").insert(payload).execute()
 
 
-def _enrich_project(project: dict, user_id: str) -> dict:
-    """Add user-specific repo URL to project dict."""
+def _enrich_project(project: dict, user_id: str, intern_role: str = "") -> dict:
+    """Add user-specific fields to project dict."""
     project["user_repo_url"] = _get_user_repo_url(project["id"], user_id)
+    project["intern_role"] = intern_role   # ← ADD THIS
     return project
 
 
@@ -534,7 +535,7 @@ async def join_project(
             project_res = db.table("projects").select("*").eq("id", project_id).execute()
             if project_res.data:
                 assign_role_tasks_to_user(project_id, user_id, intern_role)
-                return _enrich_project(dict(project_res.data[0]), user_id)
+                return _enrich_project(dict(project_res.data[0]), user_id, intern_role)
 
     # ── Find a suitable project ───────────────────────────────────
     if body.project_id:
@@ -598,7 +599,7 @@ async def join_project(
     # ── Check if team is now full → activate + create GitHub repo ─
     _check_and_activate_project(project_id, chosen, background_tasks)
 
-    return _enrich_project(dict(chosen), user_id)
+    return _enrich_project(dict(project_res.data[0]), user_id, intern_role)
 
 
 @router.post("/assign")
