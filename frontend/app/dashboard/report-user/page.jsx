@@ -16,19 +16,19 @@ const ROLE_CONFIG = {
 }
 
 const REASONS = [
-  'Missed sprint collaboration expectations',
-  'Repository misuse or unsafe changes',
-  'Inappropriate communication',
-  'Repeated blocker without escalation',
-  'No-show on sprint ceremonies',
-  'Code review negligence',
-  'Other',
+  { value: 'Missed sprint collaboration expectations', icon: '🤝', group: 'Collaboration' },
+  { value: 'Repository misuse or unsafe changes',      icon: '🔧', group: 'Code & Repository' },
+  { value: 'Inappropriate communication',              icon: '💬', group: 'Conduct' },
+  { value: 'Repeated blocker without escalation',      icon: '🚧', group: 'Collaboration' },
+  { value: 'No-show on sprint ceremonies',             icon: '📅', group: 'Attendance' },
+  { value: 'Code review negligence',                   icon: '👁', group: 'Code & Repository' },
+  { value: 'Other',                                    icon: '📝', group: 'Other' },
 ]
 
 const SEVERITY = [
-  { id: 'low',    label: 'Low',      desc: 'Minor friction, no immediate harm',        color: '#00c896', bg: '#e0fff7', dot: '#00c896' },
-  { id: 'medium', label: 'Medium',   desc: 'Disrupting collaboration or sprint flow',   color: '#f59e0b', bg: '#fffbeb', dot: '#f59e0b' },
-  { id: 'high',   label: 'High',     desc: 'Repeated violation or policy breach',       color: '#ef4444', bg: '#fff1f1', dot: '#ef4444' },
+  { id: 'low',    label: 'Low',    desc: 'Minor friction, no immediate harm',      color: '#059669', bg: '#ecfdf5', border: '#a7f3d0', dot: '#10b981', emoji: '🟢' },
+  { id: 'medium', label: 'Medium', desc: 'Disrupting collaboration or sprint flow', color: '#b45309', bg: '#fffbeb', border: '#fcd34d', dot: '#f59e0b', emoji: '🟡' },
+  { id: 'high',   label: 'High',   desc: 'Repeated violation or policy breach',    color: '#b91c1c', bg: '#fff1f2', border: '#fca5a5', dot: '#ef4444', emoji: '🔴' },
 ]
 
 function Avatar({ member, size = 36 }) {
@@ -51,6 +51,155 @@ function Skeleton({ h = 16, w = '100%', r = 8 }) {
   return <div style={{ height: h, width: w, borderRadius: r, background: 'linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 50%,var(--surface-2) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
 }
 
+// ── Custom reason dropdown ────────────────────────────────────────────────────
+function ReasonDropdown({ value, onChange, error }) {
+  const [open, setOpen] = useState(false)
+  const selected = REASONS.find(r => r.value === value)
+
+  // group reasons
+  const groups = REASONS.reduce((acc, r) => {
+    if (!acc[r.group]) acc[r.group] = []
+    acc[r.group].push(r)
+    return acc
+  }, {})
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '11px 14px', borderRadius: 12,
+          background: open ? 'white' : 'var(--surface-2)',
+          border: `1.5px solid ${error ? 'var(--red)' : open ? 'var(--accent)' : 'var(--border)'}`,
+          boxShadow: open ? '0 0 0 3px var(--accent-glow)' : 'none',
+          cursor: 'pointer', textAlign: 'left', transition: 'all .18s',
+        }}
+      >
+        {selected ? (
+          <>
+            <span style={{ fontSize: 17, flexShrink: 0 }}>{selected.icon}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{selected.value}</span>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 17, flexShrink: 0, opacity: 0.35 }}>📋</span>
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-muted)' }}>Select a reason…</span>
+          </>
+        )}
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s', opacity: 0.5 }}>
+          <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <>
+          {/* Click-away */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 11,
+            background: 'white', border: '1.5px solid var(--border)', borderRadius: 14,
+            boxShadow: '0 8px 32px rgba(0,0,0,.12)', overflow: 'hidden',
+            animation: 'dropIn .15s cubic-bezier(.22,1,.36,1)',
+          }}>
+            {Object.entries(groups).map(([group, items]) => (
+              <div key={group}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-muted)', padding: '10px 14px 4px', margin: 0 }}>
+                  {group.toUpperCase()}
+                </p>
+                {items.map(r => {
+                  const isSelected = value === r.value
+                  return (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => { onChange(r.value); setOpen(false) }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 14px', background: isSelected ? 'var(--accent-soft)' : 'transparent',
+                        border: 'none', cursor: 'pointer', textAlign: 'left',
+                        transition: 'background .12s',
+                      }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface-2)' }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                    >
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>{r.icon}</span>
+                      <span style={{ fontSize: 13, fontWeight: isSelected ? 700 : 500, color: isSelected ? 'var(--accent)' : 'var(--ink)' }}>
+                        {r.value}
+                      </span>
+                      {isSelected && (
+                        <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: 13 }}>✓</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Severity selector — card-style ────────────────────────────────────────────
+function SeveritySelector({ value, onChange, error }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {SEVERITY.map(s => {
+        const sel = value === s.id
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '11px 14px', borderRadius: 12, border: 'none',
+              background: sel ? s.bg : 'var(--surface-2)',
+              outline: sel ? `2px solid ${s.border}` : '2px solid transparent',
+              cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
+            }}
+            onMouseEnter={e => { if (!sel) e.currentTarget.style.background = 'var(--surface-3)' }}
+            onMouseLeave={e => { if (!sel) e.currentTarget.style.background = 'var(--surface-2)' }}
+          >
+            {/* Color swatch */}
+            <div style={{
+              width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+              background: sel ? s.bg : 'white',
+              border: `2px solid ${sel ? s.border : 'var(--border)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, transition: 'all .15s',
+            }}>
+              {s.emoji}
+            </div>
+
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: sel ? s.color : 'var(--ink)', margin: 0 }}>{s.label}</p>
+              <p style={{ fontSize: 11, color: sel ? s.color : 'var(--ink-muted)', margin: 0, opacity: sel ? 0.85 : 1 }}>{s.desc}</p>
+            </div>
+
+            {/* Check */}
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+              background: sel ? s.dot : 'transparent',
+              border: `2px solid ${sel ? s.dot : 'var(--border)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all .15s',
+            }}>
+              {sel && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function ReportUserPage() {
   const router = useRouter()
   const { user } = useAuthStore()
@@ -65,7 +214,6 @@ export default function ReportUserPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  // load me + teammates
   useEffect(() => {
     if (!user) { router.push('/auth/login'); return }
     let mounted = true
@@ -79,7 +227,6 @@ export default function ReportUserPage() {
         if (meRes.data.project_id) {
           const teamRes = await api.get(`/api/projects/${meRes.data.project_id}/team`)
           if (!mounted) return
-          // flatten team: teamRes.data is [{role, members:[...]}, ...]
           let members = []
           if (Array.isArray(teamRes.data)) {
             for (const slot of teamRes.data) {
@@ -137,9 +284,7 @@ export default function ReportUserPage() {
       })
       setSubmitted(true)
     } catch (err) {
-      // endpoint may not exist yet — treat 404/422 gracefully
       if (err.response?.status === 404 || err.response?.status === 405) {
-        // backend endpoint not wired yet — show success UI anyway for UX demo
         setSubmitted(true)
       } else {
         setSubmitError(err.response?.data?.detail || 'Submission failed. Please try again.')
@@ -181,7 +326,7 @@ export default function ReportUserPage() {
             ))}
             <div style={{ display: 'flex', gap: 10, fontSize: 13 }}>
               <span style={{ color: 'var(--ink-muted)', minWidth: 90 }}>Severity</span>
-              <span style={{ background: sv?.bg, color: sv?.color, borderRadius: 7, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>{sv?.label}</span>
+              <span style={{ background: sv?.bg, color: sv?.color, borderRadius: 7, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>{sv?.emoji} {sv?.label}</span>
             </div>
           </div>
           <button onClick={resetForm} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 22px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-soft)' }}>
@@ -193,7 +338,6 @@ export default function ReportUserPage() {
     )
   }
 
-  // ── Main form ──────────────────────────────────────────────────────────────
   const selectedTeammate = teammates.find(m => m.user_id === form.reportedUserId)
 
   return (
@@ -215,7 +359,7 @@ export default function ReportUserPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 290px', gap: 18, alignItems: 'start' }}
         className="report-grid">
 
-        {/* ── Left form ────────────────────────────────────── */}
+        {/* ── Left form ─────────────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Step 1 — Who */}
@@ -225,7 +369,6 @@ export default function ReportUserPage() {
               <label style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Who are you reporting?</label>
             </div>
 
-            {/* Live teammates */}
             {loadingTeam ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                 {[1, 2, 3].map(i => <Skeleton key={i} h={52} r={12} />)}
@@ -260,7 +403,6 @@ export default function ReportUserPage() {
             />
             {errors.reportedUserId && <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 6 }}>{errors.reportedUserId}</p>}
 
-            {/* Anonymous toggle */}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, cursor: 'pointer', width: 'fit-content' }}>
               <div onClick={() => setField('anonymous', !form.anonymous)}
                 style={{ width: 38, height: 22, borderRadius: 11, padding: 3, background: form.anonymous ? 'var(--accent)' : 'var(--surface-3)', border: `1.5px solid ${form.anonymous ? 'var(--accent)' : 'var(--border-strong)'}`, display: 'flex', alignItems: 'center', justifyContent: form.anonymous ? 'flex-end' : 'flex-start', transition: 'all .2s', cursor: 'pointer' }}>
@@ -270,40 +412,42 @@ export default function ReportUserPage() {
             </label>
           </div>
 
-          {/* Step 2 — Reason + Severity */}
+          {/* Step 2 — Reason + Severity (improved) */}
           <div style={{ background: 'white', border: `1.5px solid ${errors.reason || errors.severity ? 'var(--red)' : 'var(--border)'}`, borderRadius: 18, padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
               <div style={{ width: 24, height: 24, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, fontWeight: 800 }}>2</div>
               <label style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>Reason & severity</label>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 14 }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 20 }}>
+              {/* Reason — custom dropdown */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-muted)', letterSpacing: '.06em', marginBottom: 8 }}>REASON</p>
-                <select className="input-field" value={form.reason} onChange={e => setField('reason', e.target.value)}
-                  style={{ borderColor: errors.reason ? 'var(--red)' : undefined }}>
-                  <option value="" disabled>Select a reason…</option>
-                  {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                {errors.reason && <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 5 }}>{errors.reason}</p>}
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-muted)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 8 }}>Reason</p>
+                <ReasonDropdown
+                  value={form.reason}
+                  onChange={v => setField('reason', v)}
+                  error={errors.reason}
+                />
+                {errors.reason && (
+                  <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>⚠</span> {errors.reason}
+                  </p>
+                )}
               </div>
+
+              {/* Severity — card selector */}
               <div>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-muted)', letterSpacing: '.06em', marginBottom: 8 }}>SEVERITY</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {SEVERITY.map(s => {
-                    const sel = form.severity === s.id
-                    return (
-                      <button key={s.id} onClick={() => setField('severity', s.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${sel ? s.color + '66' : 'var(--border)'}`, background: sel ? s.bg : 'var(--surface-2)', cursor: 'pointer', textAlign: 'left', transition: 'all .15s' }}>
-                        <div style={{ width: 9, height: 9, borderRadius: '50%', background: s.dot, flexShrink: 0 }} />
-                        <div>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: sel ? s.color : 'var(--ink)', margin: 0 }}>{s.label}</p>
-                          <p style={{ fontSize: 10.5, color: 'var(--ink-muted)', margin: 0 }}>{s.desc}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-                {errors.severity && <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 5 }}>{errors.severity}</p>}
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-muted)', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 8 }}>Severity</p>
+                <SeveritySelector
+                  value={form.severity}
+                  onChange={v => setField('severity', v)}
+                  error={errors.severity}
+                />
+                {errors.severity && (
+                  <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>⚠</span> {errors.severity}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -344,7 +488,7 @@ export default function ReportUserPage() {
           </div>
         </div>
 
-        {/* ── Sidebar ────────────────────────────────────────── */}
+        {/* ── Sidebar ───────────────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Preview */}
@@ -366,9 +510,9 @@ export default function ReportUserPage() {
           <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
             <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--ink-muted)', marginBottom: 12 }}>WHAT HAPPENS NEXT</p>
             {[
-              { n: '1', title: 'Review within 24h',  desc: 'Moderation reads your report.' },
-              { n: '2', title: 'Investigation',       desc: 'Context checked; parties may be contacted.' },
-              { n: '3', title: 'Resolution',           desc: 'Action taken and outcome communicated.' },
+              { n: '1', title: 'Review within 24h', desc: 'Moderation reads your report.' },
+              { n: '2', title: 'Investigation',     desc: 'Context checked; parties may be contacted.' },
+              { n: '3', title: 'Resolution',        desc: 'Action taken and outcome communicated.' },
             ].map(s => (
               <div key={s.n} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                 <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 800, flexShrink: 0, marginTop: 1 }}>{s.n}</div>
@@ -399,9 +543,10 @@ export default function ReportUserPage() {
       </div>
 
       <style>{`
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-        @media(max-width:768px){.report-grid{grid-template-columns:1fr!important}}
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes dropIn  { from { opacity:0; transform: translateY(-6px) scale(0.98); } to { opacity:1; transform: none; } }
+        @media(max-width:768px) { .report-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
   )
