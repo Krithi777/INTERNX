@@ -16,142 +16,38 @@ const ROLE_CONFIG = {
   tester:    { label: 'QA/Tester',  color: '#8b5cf6', bg: '#f5f3ff',  icon: '🧪', darkBg: '#6d28d9' },
 }
 
-function MemberCard({ member, isMe, projectColor }) {
-  const rc = ROLE_CONFIG[member.intern_role] || { label: member.intern_role, color: '#5b4fff', bg: '#ede9ff', icon: '?' }
-  const [tasks, setTasks] = useState(null)
-
-  useEffect(() => {
-    // We can't fetch other users' tasks (RLS), so show their role progress generically
-    if (isMe) {
-      api.get('/api/tasks/my-tasks').then(r => {
-        const data = r.data || []
-        setTasks({
-          total: data.length,
-          done: data.filter(t => t.status === 'done').length,
-          inProgress: data.filter(t => t.status === 'in_progress').length,
-          review: data.filter(t => t.status === 'review').length,
-        })
-      }).catch(() => {})
-    }
-  }, [isMe])
-
-  const progress = tasks?.total > 0 ? Math.round((tasks.done / tasks.total) * 100) : null
-
+function MemberRow({ member, isMe, rc }) {
   return (
-    <div className={`p-6 rounded-2xl flex flex-col gap-4 transition-all duration-200 ${isMe ? 'ring-2' : ''}`}
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
       style={{
         background: isMe ? `linear-gradient(135deg, ${rc.bg}, white)` : 'white',
-        border: isMe ? `2px solid ${rc.color}50` : '1.5px solid var(--border)',
-        ringColor: isMe ? rc.color : undefined,
-        boxShadow: isMe ? `0 8px 32px ${rc.color}15` : '0 1px 4px rgba(0,0,0,0.04)',
+        border: isMe ? `1.5px solid ${rc.color}40` : '1.5px solid var(--border)',
+        boxShadow: isMe ? `0 2px 12px ${rc.color}10` : 'none',
       }}>
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black text-white flex-shrink-0"
-            style={{ background: `linear-gradient(135deg, ${rc.color}, ${rc.darkBg || rc.color})` }}>
-            {member.avatar_url ? (
-              <Image src={member.avatar_url} alt={member.name} width={56} height={56} className="rounded-2xl object-cover" />
-            ) : (
-              member.name?.[0]?.toUpperCase() || '?'
-            )}
-          </div>
-          <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center text-xs"
-            style={{ background: 'white', border: `1.5px solid ${rc.color}40` }}>
-            {rc.icon}
-          </div>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black text-white flex-shrink-0"
+        style={{ background: `linear-gradient(135deg, ${rc.color}, ${rc.darkBg || rc.color})` }}>
+        {member.avatar_url
+          ? <Image src={member.avatar_url} alt={member.name} width={36} height={36} className="rounded-xl object-cover" />
+          : member.name?.[0]?.toUpperCase() || '?'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold truncate" style={{ color: 'var(--ink)' }}>{member.name}</span>
+          {isMe && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
+              style={{ background: rc.bg, color: rc.color }}>YOU</span>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-display font-bold text-base truncate" style={{ color: 'var(--ink)' }}>{member.name}</span>
-            {isMe && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0"
-                style={{ background: rc.bg, color: rc.color }}>YOU</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: rc.bg, color: rc.color }}>
-              {rc.label}
-            </span>
-            {member.github_username && (
-              <a href={`https://github.com/${member.github_username}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs hover:underline"
-                style={{ color: 'var(--ink-muted)' }}>
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-                @{member.github_username}
-              </a>
-            )}
-          </div>
-        </div>
+        {member.github_username && (
+          <a href={`https://github.com/${member.github_username}`} target="_blank" rel="noopener noreferrer"
+            className="text-[11px] hover:underline" style={{ color: 'var(--ink-muted)' }}>
+            @{member.github_username}
+          </a>
+        )}
       </div>
-
-      {/* Task progress (only for self) */}
-      {isMe && tasks && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>My tasks</span>
-            <span className="text-xs font-bold" style={{ color: rc.color }}>
-              {tasks.done}/{tasks.total} done
-            </span>
-          </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${rc.color}20` }}>
-            <div className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${progress || 0}%`, background: rc.color }} />
-          </div>
-          <div className="flex gap-3 mt-2">
-            {[
-              { label: 'In progress', count: tasks.inProgress, color: '#3b82f6' },
-              { label: 'In review',   count: tasks.review,     color: '#f59e0b' },
-              { label: 'Done',        count: tasks.done,        color: '#00c896' },
-            ].map(({ label, count, color }) => count > 0 && (
-              <div key={label} className="flex items-center gap-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
-                <span>{count} {label.toLowerCase()}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Placeholder for other members */}
-      {!isMe && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
-          style={{ background: 'var(--surface-2)', color: 'var(--ink-muted)' }}>
-          <span>{rc.icon}</span>
-          <span>Working on {rc.label.toLowerCase()} tasks</span>
-        </div>
-      )}
-
-      {/* Joined date */}
-      <div className="text-[10px] pt-2 border-t" style={{ color: 'var(--ink-muted)', borderColor: 'var(--border)' }}>
-        Joined {new Date(member.joined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-      </div>
-    </div>
-  )
-}
-
-function EmptySlotCard({ role }) {
-  const rc = ROLE_CONFIG[role] || { label: role, color: '#8888a0', bg: '#f0f0f4', icon: '?' }
-  return (
-    <div className="p-6 rounded-2xl flex flex-col items-center justify-center gap-3 text-center"
-      style={{ background: 'var(--surface-2)', border: '2px dashed var(--border)', minHeight: 160 }}>
-      <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl opacity-30"
-        style={{ background: rc.bg }}>
-        {rc.icon}
-      </div>
-      <div>
-        <p className="text-sm font-semibold" style={{ color: 'var(--ink-muted)' }}>Open slot</p>
-        <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>Waiting for {rc.label} intern</p>
-      </div>
-      <div className="flex gap-1">
-        {[0, 1, 2].map(i => (
-          <div key={i} className="w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ background: rc.color + '60', animationDelay: `${i * 0.3}s` }} />
-        ))}
-      </div>
+      <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--ink-muted)' }}>
+        {new Date(member.joined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+      </span>
     </div>
   )
 }
@@ -163,31 +59,6 @@ export default function TeamPage() {
   const [project, setProject]   = useState(null)
   const [teamData, setTeamData] = useState(null)
   const [loading, setLoading]   = useState(true)
-  const [retrying, setRetrying] = useState(false)
-  const [retryMsg, setRetryMsg] = useState('')
-
-  const handleRetryRepo = async () => {
-    if (!project) return
-    setRetrying(true)
-    setRetryMsg('')
-    try {
-      await api.post(`/api/projects/${project.id}/retry-repo`)
-      setRetryMsg('Repo creation queued! Refreshing in 10s…')
-      setTimeout(async () => {
-        const [projectRes, teamRes] = await Promise.all([
-          api.get(`/api/projects/${project.id}`),
-          api.get(`/api/projects/${project.id}/team`),
-        ])
-        setProject(projectRes.data)
-        setTeamData(teamRes.data)
-        setRetryMsg('')
-        setRetrying(false)
-      }, 10000)
-    } catch (err) {
-      setRetryMsg(err?.response?.data?.detail || 'Failed to queue repo creation.')
-      setRetrying(false)
-    }
-  }
 
   useEffect(() => {
     if (!user) { router.push('/auth/login'); return }
@@ -225,9 +96,7 @@ export default function TeamPage() {
   if (!project || !teamData) return null
 
   const isActive = project.project_status === 'active'
-  // Only use teamData.internx_repo — set only after GitHub repo is actually created.
-  // Do NOT fall back to project.internx_repo_url (stale hardcoded URL).
-  const repoUrl = teamData.internx_repo || null
+  const repoUrl = project.internx_repo_url
   const teamRoles = project.team_roles || (project.intern_role ? { [project.intern_role]: 1 } : {})
   const totalSlots = Object.values(teamRoles).reduce((a, b) => a + b, 0)
   const filledSlots = teamData.team?.length || 0
@@ -370,70 +239,123 @@ export default function TeamPage() {
                 </button>
               </div>
             )}
-
-            {/* Retry repo creation — shown when team is full but repo not yet created */}
-            {isActive && !repoUrl && (
-              <div className="mt-4 flex flex-col gap-2">
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.6)', border: '1px dashed #fbbf24' }}>
-                  <span className="text-sm" style={{ color: '#92400e' }}>
-                    ⚠️ Team is complete but the GitHub repo hasn&apos;t been created yet.
-                  </span>
-                  <button
-                    onClick={handleRetryRepo}
-                    disabled={retrying}
-                    className="ml-auto flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
-                    style={{ background: '#24292e', color: 'white' }}>
-                    {retrying ? 'Creating…' : '🔄 Create Repo'}
-                  </button>
-                </div>
-                {retryMsg && (
-                  <p className="text-xs px-2" style={{ color: retrying ? '#166534' : '#dc2626' }}>
-                    {retryMsg}
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Team grid */}
-        <div className="mb-6 flex items-center justify-between animate-fade-up stagger-1">
-          <h2 className="text-xl font-display font-bold" style={{ color: 'var(--ink)' }}>
-            Team Members
-          </h2>
-          <div className="flex -space-x-2">
-            {(teamData.team || []).map(m => {
-              const rc = ROLE_CONFIG[m.intern_role] || { color: '#5b4fff' }
+        {/* Project Members — grouped by role/team */}
+        <div className="mb-6 animate-fade-up stagger-1">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-display font-bold" style={{ color: 'var(--ink)' }}>
+                Project Members
+              </h2>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+                {filledSlots}/{totalSlots} members joined
+              </p>
+            </div>
+            {/* Avatar stack */}
+            <div className="flex -space-x-2">
+              {(teamData.team || []).map(m => {
+                const rc = ROLE_CONFIG[m.intern_role] || { color: '#5b4fff' }
+                return (
+                  <div key={m.user_id} className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold text-white"
+                    style={{ background: rc.color, borderColor: 'var(--surface)' }}>
+                    {m.name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                )
+              })}
+              {totalSlots - filledSlots > 0 && (
+                <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold"
+                  style={{ background: 'var(--border)', borderColor: 'var(--surface)', color: 'var(--ink-muted)' }}>
+                  +{totalSlots - filledSlots}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {Object.entries(teamRoles).map(([role, count]) => {
+              const rc = ROLE_CONFIG[role] || { label: role, color: '#5b4fff', bg: '#ede9ff', icon: '?', darkBg: '#3730a3' }
+              const slotData = (teamData.slots || []).find(s => s.role === role)
+              const members = slotData?.members || []
+              const openSlots = count - members.length
+              const isMyTeam = role === (teamData.team || []).find(m => m.user_id === user?.id)?.intern_role
+
               return (
-                <div key={m.user_id} className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-bold text-white"
-                  style={{ background: rc.color, borderColor: 'var(--surface)' }}>
-                  {m.name?.[0]?.toUpperCase() || '?'}
+                <div key={role} className="rounded-2xl overflow-hidden"
+                  style={{ border: isMyTeam ? `2px solid ${rc.color}35` : '1.5px solid var(--border)' }}>
+
+                  {/* Team name header */}
+                  <div className="flex items-center gap-3 px-5 py-3"
+                    style={{ background: isMyTeam ? rc.bg : 'var(--surface-2)' }}>
+                    <span className="text-base">{rc.icon}</span>
+                    <span className="font-display font-bold text-sm" style={{ color: isMyTeam ? rc.color : 'var(--ink)' }}>
+                      {rc.label} Team
+                    </span>
+                    {isMyTeam && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: rc.color, color: 'white' }}>
+                        Your Team
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs" style={{ color: 'var(--ink-muted)' }}>
+                      {members.length}/{count}
+                    </span>
+                  </div>
+
+                  {/* Members + available slots */}
+                  <div className="p-3 space-y-2" style={{ background: 'var(--surface)' }}>
+
+                    {/* Filled members */}
+                    {members.length > 0
+                      ? members.map(member => (
+                          <MemberRow
+                            key={member.user_id}
+                            member={member}
+                            isMe={member.user_id === user?.id}
+                            rc={rc}
+                          />
+                        ))
+                      : (
+                        <p className="text-xs px-4 py-2" style={{ color: 'var(--ink-muted)' }}>
+                          No members yet.
+                        </p>
+                      )
+                    }
+
+                    {/* Available divider + open slots */}
+                    {openSlots > 0 && (
+                      <>
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                          <span className="text-[10px] font-semibold uppercase tracking-widest"
+                            style={{ color: 'var(--ink-muted)' }}>Available</span>
+                          <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                        </div>
+                        {Array.from({ length: openSlots }).map((_, i) => (
+                          <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-xl"
+                            style={{ background: 'var(--surface-2)', border: '1.5px dashed var(--border)' }}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base opacity-25 flex-shrink-0"
+                              style={{ background: rc.bg }}>{rc.icon}</div>
+                            <div>
+                              <p className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>Open slot</p>
+                              <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>Waiting for {rc.label} intern</p>
+                            </div>
+                            <div className="flex gap-1 ml-auto">
+                              {[0, 1, 2].map(j => (
+                                <div key={j} className="w-1.5 h-1.5 rounded-full animate-pulse"
+                                  style={{ background: rc.color + '50', animationDelay: `${j * 0.3}s` }} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             })}
-            {totalSlots - filledSlots > 0 && (
-              <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold"
-                style={{ background: 'var(--border)', borderColor: 'var(--surface)', color: 'var(--ink-muted)' }}>
-                +{totalSlots - filledSlots}
-              </div>
-            )}
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-up stagger-2">
-          {allSlots.map(({ role, member }, idx) =>
-            member ? (
-              <MemberCard
-                key={`${role}-${idx}`}
-                member={member}
-                isMe={member.user_id === user?.id}
-                projectColor={project.company_color}
-              />
-            ) : (
-              <EmptySlotCard key={`${role}-${idx}-empty`} role={role} />
-            )
-          )}
         </div>
 
         {/* Branch info */}
