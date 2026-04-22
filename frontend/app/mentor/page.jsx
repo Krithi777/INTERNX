@@ -87,13 +87,24 @@ function MentorChat() {
 
     ws.onmessage = (event) => {
       const token = event.data
-      if (token === '[DONE]') { setIsTyping(false); return }
+      if (token === '[DONE]') {
+        setIsTyping(false)
+        setMessages(prev => {
+          const last = prev[prev.length - 1]
+          if (last?.streaming) return [...prev.slice(0, -1), { ...last, streaming: false }]
+          return prev
+        })
+        setShowSuggestions(true)
+        return
+      }
       if (token.startsWith('[ERROR]')) {
         setIsTyping(false)
         setMessages(prev => [...prev, { role: 'error', content: token.replace('[ERROR] ', '') }])
+        setShowSuggestions(true)
         return
       }
       setIsTyping(true)
+      setShowSuggestions(false)
       setMessages(prev => {
         const last = prev[prev.length - 1]
         if (last?.role === 'assistant' && last?.streaming)
@@ -170,34 +181,67 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
   const displayDesc = task?.description || project?._desc || ''
 
   const renderMarkdown = (text) => {
-    const lines = text.split('\n')
     const elements = []
     let key = 0
-    for (const line of lines) {
-      // Numbered list
-      const numMatch = line.match(/^(\d+)\.\s\*\*(.+?)\*\*:?\s*(.*)/)
-      if (numMatch) {
-        elements.push(<div key={key++} style={{ marginBottom: 4 }}><strong>{numMatch[1]}. {numMatch[2]}</strong>{numMatch[3] ? `: ${numMatch[3]}` : ''}</div>)
-        continue
+    // Split out code blocks first
+    const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g
+    let lastIndex = 0
+    let match
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      // Render text before code block
+      if (match.index > lastIndex) {
+        elements.push(...renderLines(text.slice(lastIndex, match.index), key))
+        key += 100
       }
-      // Bullet with bold
-      const bulletBold = line.match(/^\*\s\*\*(.+?)\*\*:?\s*(.*)/)
-      if (bulletBold) {
-        elements.push(<div key={key++} style={{ marginBottom: 4, paddingLeft: 12 }}>• <strong>{bulletBold[1]}</strong>{bulletBold[2] ? `: ${bulletBold[2]}` : ''}</div>)
-        continue
-      }
-      // Plain bullet
-      const bullet = line.match(/^\*\s(.+)/)
-      if (bullet) {
-        elements.push(<div key={key++} style={{ marginBottom: 4, paddingLeft: 12 }}>• {bullet[1]}</div>)
-        continue
-      }
-      // Bold inline: replace **text** with <strong>
-      const parts = line.split(/\*\*(.+?)\*\*/)
-      const rendered = parts.map((p, i) => i % 2 === 1 ? <strong key={i}>{p}</strong> : p)
-      elements.push(<div key={key++} style={{ marginBottom: line === '' ? 8 : 2 }}>{rendered}</div>)
+      // Render code block
+      elements.push(
+        <pre key={key++} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '10px 14px', overflowX: 'auto',
+          fontSize: 12, lineHeight: 1.6, margin: '8px 0', fontFamily: 'monospace'
+        }}>
+          <code>{match[2].trim()}</code>
+        </pre>
+      )
+      lastIndex = match.index + match[0].length
+    }
+    // Remaining text after last code block
+    if (lastIndex < text.length) {
+      elements.push(...renderLines(text.slice(lastIndex), key))
     }
     return elements
+  }
+
+  const renderLines = (text, baseKey = 0) => {
+    const lines = text.split('\n')
+    return lines.map((line, i) => {
+      const k = baseKey + i
+      // Numbered list with bold: "1. **Title**: rest"
+      const numBold = line.match(/^(\d+)\.\s\*\*(.+?)\*\*:?\s*(.*)/)
+      if (numBold) return <div key={k} style={{ marginBottom: 4 }}><strong>{numBold[1]}. {numBold[2]}</strong>{numBold[3] ? `: ${numBold[3]}` : ''}</div>
+      // Numbered list plain: "1. text"
+      const numPlain = line.match(/^(\d+)\.\s(.+)/)
+      if (numPlain) return <div key={k} style={{ marginBottom: 4 }}>{numPlain[1]}. {inlineBold(numPlain[2])}</div>
+      // Bullet with bold: "* **Title**: rest"
+      const bulletBold = line.match(/^\*\s\*\*(.+?)\*\*:?\s*(.*)/)
+      if (bulletBold) return <div key={k} style={{ marginBottom: 4, paddingLeft: 12 }}>• <strong>{bulletBold[1]}</strong>{bulletBold[2] ? `: ${bulletBold[2]}` : ''}</div>
+      // Sub-bullet: "    * text"
+      const subBullet = line.match(/^\s{2,}\*\s(.+)/)
+      if (subBullet) return <div key={k} style={{ marginBottom: 2, paddingLeft: 24 }}>◦ {inlineBold(subBullet[1])}</div>
+      // Plain bullet: "* text"
+      const bullet = line.match(/^\*\s(.+)/)
+      if (bullet) return <div key={k} style={{ marginBottom: 4, paddingLeft: 12 }}>• {inlineBold(bullet[1])}</div>
+      // Empty line = spacer
+      if (line.trim() === '') return <div key={k} style={{ height: 6 }} />
+      // Normal line with possible inline bold
+      return <div key={k} style={{ marginBottom: 2 }}>{inlineBold(line)}</div>
+    })
+  }
+
+  const inlineBold = (text) => {
+    const parts = text.split(/\*\*(.+?)\*\*/)
+    if (parts.length === 1) return text
+    return parts.map((p, i) => i % 2 === 1 ? <strong key={i}>{p}</strong> : p)
   }
 
   return (
@@ -266,7 +310,7 @@ Folder Structure: ${JSON.stringify(project.folder_structure || {})}`
               borderRadius: msg.role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
               background: msg.role === 'user' ? 'var(--accent)' : msg.role === 'error' ? 'var(--red-soft)' : 'var(--surface-2)',
               color: msg.role === 'user' ? 'white' : msg.role === 'error' ? 'var(--red)' : 'var(--ink)',
-              fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+              fontSize: 14, lineHeight: 1.6,
               border: msg.role === 'assistant' ? '1px solid var(--border)' : 'none',
             }}>
               {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
