@@ -11,11 +11,14 @@ from app.schemas.auth import (
 router = APIRouter()
 
 
+PLACEHOLDER_PROJECT_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+
 def _get_active_project_id(user_id: str) -> str | None:
     """
     Returns the user's active project_id using the real schema:
       group_members → project_groups.project_id
     Falls back to profiles.project_id if not found.
+    Never returns the placeholder ID.
     """
     result = (
         db.table("group_members")
@@ -27,12 +30,16 @@ def _get_active_project_id(user_id: str) -> str | None:
     if result.data:
         pg = result.data[0].get("project_groups")
         if isinstance(pg, dict) and pg.get("project_id"):
-            return pg["project_id"]
+            pid = pg["project_id"]
+            if pid != PLACEHOLDER_PROJECT_ID:
+                return pid
 
     # Fallback: profiles.project_id (set by /join endpoint)
     profile = db.table("profiles").select("project_id").eq("id", user_id).limit(1).execute()
-    if profile.data and profile.data[0].get("project_id"):
-        return profile.data[0]["project_id"]
+    if profile.data:
+        pid = profile.data[0].get("project_id")
+        if pid and pid != PLACEHOLDER_PROJECT_ID:
+            return pid
 
     return None
 
